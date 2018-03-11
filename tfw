@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+# vim:expandtab:ts=2:sw=2:
+set -o errexit
+set -o pipefail
+
+main() {
+  if [[ "${DEBUG}" ]]; then
+    set -o xtrace
+  fi
+
+  local command="${1}"
+  shift || true
+  "__run_${command}" "${@}" && exit 1
+  __run_help 1
+}
+
+__die() {
+  echo "${*}" >&2
+  exit 2
+}
+
+__run_help() {
+  cat <<'EOUSAGE'
+Usage: tfw <command> [${more-stuff(1)}, ${maybe(2)}]
+
+    h, help - echo this string and exit
+
+Docker image configuration and deployment stuff
+-----------------------------------------------
+
+    e, extract   - extract ${name(1)} systemd files from ${image(2)}
+    p, printenv  - print env vars for ${name(1)} to ${out:-STDOUT(2)}
+    w, writeenv  - write env vars for ${name(1)} to ${RUNDIR}/ with a basename
+                   of ${name(1)}.env or ${custom_name(2)}.env if given
+
+Junk drawer utility stuff
+-------------------------
+
+    d, urldecode - print URL-decoded/unescaped ${strings(*)}
+
+EOUSAGE
+exit "${1:-0}"
+}
+
+__run_--help() { __run_help; }
+__run_-h() { __run_help; }
+__run_h() { __run_help; }
+__run_() { __run_help; }
+
+__run_urldecode() {
+  : "${*//+/ }"
+  echo -e "${_//%/\\x}"
+}
+
+__run_d() { __run_urldecode "${@}"; }
+
+__run_printenv() {
+  local name="${1}"
+  if [[ ! "${name}" ]]; then
+    __die 'Missing positional argument for name'
+  fi
+
+  local out="${2}"
+
+  : "${ETCDEFAULT:=/etc/default}"
+
+  if [[ "${out}" ]]; then
+    echo "${out}"
+    exec 1>"${out}"
+  fi
+
+  for config_file in \
+    travis-enterprise \
+    "${name}-chef" \
+    "${name}" \
+    "${name}-cloud-init" \
+    "${name}-local"; do
+  if [ -f "${ETCDEFAULT}/${config_file}" ]; then
+    echo "# ${ETCDEFAULT}/${config_file}"
+    while read -r line; do
+      line="${line//\'/}"
+      echo "${line//\"/}"
+    done <"${ETCDEFAULT}/${config_file}"
+  fi
+done
+}
+
+__run_p() { __run_printenv; }
+
+__run_writeenv() {
+  local dest_basename="${2:-${1}}"
+  local dest="${RUNDIR:-/var/tmp/travis-run.d}/${dest_basename}.env"
+  mkdir -p "$(dirname "${dest}")"
+  __run_printenv "${1}" "${dest}"
+}
+
+__run_w() { __run_writeenv "${@}"; }
+
+__run_extract() {
+  local name="${1}"
+  local image="${2}"
+
+  if [[ ! "${name}" ]]; then
+    __die 'Missing positional argument for name'
+  fi
+
+  if [[ ! "${image}" ]]; then
+    __die 'Missing positional argument for image'
+  fi
+
+  local nowish
+  nowish="$(date +%s)"
+  local extract_dir="${RUNDIR:-/var/tmp/travis-run.d}/${name}-extract.d"
+  local service_dest="${ETCDIR:-/etc}/systemd/system/${name}.service"
+  local wrapper_dest="${USRSBINDIR:-/usr/sbin}/${name}-wrapper"
+
+  mkdir -p "${extract_dir}"
+
+  docker run -d --rm -v "${extract_dir}:/app" "${image}" sh -c "sleep 10"
+
+  if [[ -f "${extract_dir}/systemd.service" ]]; then
+    cp -v "${extract_dir}/systemd.service" "${service_dest}"
+  fi
+
+  if [[ -f "${extract_dir}/systemd-wrapper" ]]; then
+    cp -v "${extract_dir}/systemd-wrapper" "${wrapper_dest}"
+  fi
+}
+
+__run_e() { __run_extract "${@}"; }
+
+main "${@}"

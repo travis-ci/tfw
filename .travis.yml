@@ -1,0 +1,4 @@
+language: bash
+sudo: required
+install: make deps
+script: make test
