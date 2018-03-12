@@ -118,13 +118,14 @@ __run_extract() {
   tmpcontainer="$(docker run -d --rm "${image}" sh -c "sleep 10")"
 
   if docker cp "${tmpcontainer}:/app/systemd.service" "${service_dest}"; then
-    systemctl enable "${name}"
+    echo "Extracted ${service_dest}"
   else
     echo "No systemd.service file found for ${name}" >&2
   fi
 
   if docker cp "${tmpcontainer}:/app/systemd-wrapper" "${wrapper_dest}"; then
     chmod +x "${wrapper_dest}"
+    echo "Extracted ${wrapper_dest}"
   else
     echo "No systemd wrapper executable found for ${name}" >&2
   fi

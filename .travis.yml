@@ -1,4 +1,6 @@
 language: bash
+services:
+- docker
 cache:
   directories:
   - "${HOME}/bin"

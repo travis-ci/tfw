@@ -15,6 +15,8 @@ setup() {
   export ETCDIR="${BATS_TMPDIR}/tfw/etc"
   export RUNDIR="${BATS_TMPDIR}/tfw/var/tmp/travis-run.d"
   export USRSBINDIR="${BATS_TMPDIR}/tfw/usr/sbin"
+  : "${TFWTEST_IMAGE:=travisci/nat-conntracker:0.3.0-10-g143f6c0}"
+  export TFWTEST_IMAGE
 
   cat >"${ETCDIR}/default/travis-enterprise" <<'EOF'
 export TFW_BOOPS=8999
@@ -110,4 +112,23 @@ teardown() {
   source "${RUNDIR}/tfwtest-1.env"
   [[ "${status}" -eq 0 ]]
   [[ "${TFW_BOOPS}" == 9003 ]]
+}
+
+@test "tfw extract" {
+  run ./tfw extract
+  [[ "${status}" -eq 2 ]]
+}
+
+@test "tfw extract tfwtest" {
+  run ./tfw extract tfwtest
+  [[ "${status}" -eq 2 ]]
+}
+
+@test "tfw extract tfwtest <image>" {
+  run ./tfw extract tfwtest "${TFWTEST_IMAGE}"
+  [[ "${status}" -eq 0 ]]
+  [[ -f "${ETCDIR}/systemd/system/tfwtest.service" ]]
+  [[ -f "${USRSBINDIR}/tfwtest-wrapper" ]]
+  [[ "${output}" =~ Extracted.+tfwtest.service ]]
+  [[ "${output}" =~ Extracted.*tfwtest-wrapper ]]
 }
