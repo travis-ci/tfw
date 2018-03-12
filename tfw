@@ -4,11 +4,16 @@ set -o errexit
 set -o pipefail
 
 __TFW_VERSION__='v0.1.0'
+declare -A __TFW_ALIASES__
 
 main() {
   if [[ "${DEBUG}" ]]; then
     set -o xtrace
   fi
+
+  for key in "${!__TFW_ALIASES__[@]}"; do
+    eval "__run_${key}() { __run_${__TFW_ALIASES__[${key}]} \"\${@}\"; }"
+  done
 
   local command="${1}"
   shift || true
@@ -18,11 +23,20 @@ main() {
   __run_help 1
 }
 
+aka() {
+  local dest="${1}"
+  shift || true
+  for key in "${@}"; do
+    __TFW_ALIASES__[${key}]="${dest}"
+  done
+}
+
 __die() {
   echo "${*}" >&2
   exit 2
 }
 
+aka help h -h --help
 __run_help() {
   cat <<'EOUSAGE'
 Usage: tfw <command> [${more-stuff(1)}, ${maybe(2)}]
@@ -45,27 +59,19 @@ EOUSAGE
   exit "${1:-0}"
 }
 
-__run_--help() { __run_help; }
-__run_-h() { __run_help; }
-__run_h() { __run_help; }
-__run_() { __run_help; }
-
+aka version v -v --version
 __run_version() {
   echo "${__TFW_VERSION__}"
   exit 0
 }
 
-__run_v() { __run_version; }
-__run_-v() { __run_version; }
-__run_--version() { __run_version; }
-
+aka urldecode d
 __run_urldecode() {
   : "${*//+/ }"
   echo -e "${_//%/\\x}"
 }
 
-__run_d() { __run_urldecode "${@}"; }
-
+aka printenv p
 __run_printenv() {
   local name="${1}"
   if [[ ! "${name}" ]]; then
@@ -97,8 +103,7 @@ __run_printenv() {
   done
 }
 
-__run_p() { __run_printenv "${@}"; }
-
+aka writeenv w
 __run_writeenv() {
   local dest_basename="${2:-${1}}"
   local dest="${RUNDIR:-/var/tmp/travis-run.d}/${dest_basename}.env"
@@ -106,8 +111,7 @@ __run_writeenv() {
   __run_printenv "${1}" "${dest}"
 }
 
-__run_w() { __run_writeenv "${@}"; }
-
+aka extract e
 __run_extract() {
   local name="${1}"
   local image="${2}"
@@ -142,7 +146,5 @@ __run_extract() {
     echo "No systemd wrapper executable found for ${name}" >&2
   fi
 }
-
-__run_e() { __run_extract "${@}"; }
 
 main "${@}"
