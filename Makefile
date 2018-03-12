@@ -1,8 +1,15 @@
+SHELL := bash
+TMPDIR ?= /tmp
+
 SHELLCHECK_URL := https://www.googleapis.com/download/storage/v1/b/shellcheck/o/shellcheck-v0.4.7.linux.x86_64.tar.xz?alt=media
 SHFMT_URL := https://github.com/mvdan/sh/releases/download/v2.2.0/shfmt_v2.2.0_linux_amd64
 
 .PHONY: all
 all: test
+
+.PHONY: clean
+clean:
+	@: noop
 
 .PHONY: test
 test:
@@ -10,14 +17,24 @@ test:
 
 .PHONY: lint
 lint:
-	shellcheck tfw
-	shfmt -i 2 -w tfw
+	checkmake Makefile &>/dev/null
+	shfmt -f . | xargs shellcheck
+	shfmt -i 2 -w .
+
+.PHONY: ensure-checkmake
+ensure-checkmake:
+	if ! checkmake --version &>/dev/null; then \
+		go get github.com/mrtazz/checkmake; \
+		pushd $${GOPATH%%:*}/src/github.com/mrtazz/checkmake; \
+		make all install PREFIX=$(HOME); \
+		popd; \
+	fi
 
 .PHONY: ensure-shellcheck
 ensure-shellcheck:
 	if [[ $$(shellcheck --version | awk '/^version:/ { print $$2 }') != 0.4.7 ]]; then \
-		curl -sSL -o "$(PWD)/tmp/shellcheck.tar.xz" "$(SHELLCHECK_URL)"; \
-		tar -C "$(HOME)/bin" --exclude="*.txt" --strip-components=1 -xf "$(PWD)/tmp/shellcheck.tar.xz"; \
+		curl -sSL -o "$(TMPDIR)/shellcheck.tar.xz" "$(SHELLCHECK_URL)"; \
+		tar -C "$(HOME)/bin" --exclude="*.txt" --strip-components=1 -xf "$(TMPDIR)/shellcheck.tar.xz"; \
 		shellcheck --version; \
 	fi
 

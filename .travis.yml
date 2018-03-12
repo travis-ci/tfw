@@ -5,7 +5,7 @@ cache:
   directories:
   - "${HOME}/bin"
 install:
-- make ensure-shellcheck ensure-shfmt
+- make ensure-checkmake ensure-shellcheck ensure-shfmt
 script:
 - make lint
 - git diff --exit-code
