@@ -3,6 +3,8 @@
 set -o errexit
 set -o pipefail
 
+__TFW_VERSION__='v0.1.0'
+
 main() {
   if [[ "${DEBUG}" ]]; then
     set -o xtrace
@@ -25,16 +27,17 @@ __run_help() {
   cat <<'EOUSAGE'
 Usage: tfw <command> [${more-stuff(1)}, ${maybe(2)}]
 
-  h, help - echo this string and exit
+  h, help    - echo this string and exit
+  v, version - echo version and exit
 
--- Docker image configuration and deployment stuff --
+Docker image configuration and deployment stuff:
 
   e, extract   - extract ${name(1)} systemd files from ${image(2)}
   p, printenv  - print env vars for ${name(1)} to ${out:-STDOUT(2)}
   w, writeenv  - write env vars for ${name(1)} to ${RUNDIR}/ with a basename
                  of ${name(1)}.env or ${custom_name(2)}.env if given
 
--- Junk drawer utility stuff --
+Junk drawer utility stuff:
 
   d, urldecode - print URL-decoded/unescaped ${strings(*)}
 
@@ -46,6 +49,15 @@ __run_--help() { __run_help; }
 __run_-h() { __run_help; }
 __run_h() { __run_help; }
 __run_() { __run_help; }
+
+__run_version() {
+  echo "${__TFW_VERSION__}"
+  exit 0
+}
+
+__run_v() { __run_version; }
+__run_-v() { __run_version; }
+__run_--version() { __run_version; }
 
 __run_urldecode() {
   : "${*//+/ }"

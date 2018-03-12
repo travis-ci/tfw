@@ -45,90 +45,92 @@ teardown() {
   rm -rf "${BATS_TMPDIR}/tfw"
 }
 
-@test "tfw help system" {
+@test "tfw -h/--help/help/h exits 0" {
   for word in '-h' '--help' 'help' 'h'; do
     run ./tfw "${word}"
     [[ "${status}" -eq 0 ]]
   done
 }
 
-@test "tfw urldecode" {
-  run ./tfw urldecode 'what%2Fthe+what%3F'
-  [[ "${output}" == "what/the what?" ]]
+@test "tfw urldecode/d decodes stuff and exits 0" {
+  for word in 'urldecode' 'd'; do
+    run ./tfw "${word}" 'what%2Fthe+what%3F'
+    [[ "${output}" == "what/the what?" ]]
+    [[ "${status}" -eq 0 ]]
+  done
 }
 
-@test "tfw d" {
-  run ./tfw d 'how+does+one%3F%3A'
-  [[ "${output}" == "how does one?:" ]]
+@test "tfw printenv/p without args exits 2" {
+  for word in 'printenv' 'p'; do
+    run ./tfw "${word}"
+    [[ "${status}" -eq 2 ]]
+  done
 }
 
-@test "tfw printenv" {
-  run ./tfw printenv
-  [[ "${status}" -eq 2 ]]
+@test "tfw printenv/p tfwtest prints stuff and exits 0" {
+  for word in 'printenv' 'p'; do
+    run ./tfw "${word}" tfwtest
+    eval "${output}"
+    [[ "${status}" -eq 0 ]]
+    [[ "${TFW_BOOPS}" == 9003 ]]
+  done
 }
 
-@test "tfw printenv tfwtest" {
-  run ./tfw printenv tfwtest
-  eval "${output}"
-  [[ "${status}" -eq 0 ]]
-  [[ "${TFW_BOOPS}" == 9003 ]]
+@test "tfw printenv/p notset prints stuff and exits 0" {
+  for word in 'printenv' 'p'; do
+    run ./tfw "${word}" notset
+    eval "${output}"
+    [[ "${status}" -eq 0 ]]
+    [[ "${TFW_BOOPS}" == 8999 ]]
+  done
 }
 
-@test "tfw p tfwtest" {
-  run ./tfw p tfwtest
-  eval "${output}"
-  [[ "${status}" -eq 0 ]]
-  [[ "${TFW_BOOPS}" == 9003 ]]
+@test "tfw writeenv/w without args exits 2" {
+  for word in 'writeenv' 'w'; do
+    run ./tfw "${word}"
+    [[ "${status}" -eq 2 ]]
+  done
 }
 
-@test "tfw printenv notset" {
-  run ./tfw printenv notset
-  eval "${output}"
-  [[ "${status}" -eq 0 ]]
-  [[ "${TFW_BOOPS}" == 8999 ]]
+@test "tfw writeenv/w tfwtest writes stuff and exits 0" {
+  for word in 'writeenv' 'w'; do
+    run ./tfw "${word}" tfwtest
+    source "${RUNDIR}/tfwtest.env"
+    [[ "${status}" -eq 0 ]]
+    [[ "${TFW_BOOPS}" == 9003 ]]
+  done
 }
 
-@test "tfw writeenv" {
-  run ./tfw writeenv
-  [[ "${status}" -eq 2 ]]
+@test "tfw writeenv/w tfwtest tfwtest-1 writes stuff and exits 0" {
+  for word in 'writeenv' 'w'; do
+    run ./tfw "${word}" tfwtest tfwtest-1
+    source "${RUNDIR}/tfwtest-1.env"
+    [[ "${status}" -eq 0 ]]
+    [[ "${TFW_BOOPS}" == 9003 ]]
+  done
 }
 
-@test "tfw writeenv tfwtest" {
-  run ./tfw writeenv tfwtest
-  source "${RUNDIR}/tfwtest.env"
-  [[ "${status}" -eq 0 ]]
-  [[ "${TFW_BOOPS}" == 9003 ]]
+@test "tfw extract/e without args exits 2" {
+  for word in 'extract' 'e'; do
+    run ./tfw "${word}"
+    [[ "${status}" -eq 2 ]]
+  done
 }
 
-@test "tfw w tfwtest" {
-  run ./tfw w tfwtest
-  source "${RUNDIR}/tfwtest.env"
-  [[ "${status}" -eq 0 ]]
-  [[ "${TFW_BOOPS}" == 9003 ]]
+@test "tfw extract/e tfwtest exits 2" {
+  for word in 'extract' 'e'; do
+    run ./tfw "${word}" tfwtest
+    [[ "${status}" -eq 2 ]]
+  done
 }
 
-@test "tfw writeenv tfwtest tfwtest-1" {
-  run ./tfw writeenv tfwtest tfwtest-1
-  source "${RUNDIR}/tfwtest-1.env"
-  [[ "${status}" -eq 0 ]]
-  [[ "${TFW_BOOPS}" == 9003 ]]
-}
-
-@test "tfw extract" {
-  run ./tfw extract
-  [[ "${status}" -eq 2 ]]
-}
-
-@test "tfw extract tfwtest" {
-  run ./tfw extract tfwtest
-  [[ "${status}" -eq 2 ]]
-}
-
-@test "tfw extract tfwtest <image>" {
-  run ./tfw extract tfwtest "${TFWTEST_IMAGE}"
-  [[ "${status}" -eq 0 ]]
-  [[ -f "${ETCDIR}/systemd/system/tfwtest.service" ]]
-  [[ -f "${USRSBINDIR}/tfwtest-wrapper" ]]
-  [[ "${output}" =~ Extracted.+tfwtest.service ]]
-  [[ "${output}" =~ Extracted.*tfwtest-wrapper ]]
+@test "tfw extract/e tfwtest <image> extracts stuff and exits 0" {
+  for word in 'extract' 'e'; do
+    run ./tfw "${word}" tfwtest "${TFWTEST_IMAGE}"
+    [[ "${status}" -eq 0 ]]
+    [[ -f "${ETCDIR}/systemd/system/tfwtest.service" ]]
+    [[ -f "${USRSBINDIR}/tfwtest-wrapper" ]]
+    [[ "${output}" =~ Extracted.+tfwtest.service ]]
+    [[ "${output}" =~ Extracted.*tfwtest-wrapper ]]
+  done
 }
