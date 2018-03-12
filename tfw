@@ -25,20 +25,18 @@ __run_help() {
   cat <<'EOUSAGE'
 Usage: tfw <command> [${more-stuff(1)}, ${maybe(2)}]
 
-    h, help - echo this string and exit
+  h, help - echo this string and exit
 
-Docker image configuration and deployment stuff
------------------------------------------------
+-- Docker image configuration and deployment stuff --
 
-    e, extract   - extract ${name(1)} systemd files from ${image(2)}
-    p, printenv  - print env vars for ${name(1)} to ${out:-STDOUT(2)}
-    w, writeenv  - write env vars for ${name(1)} to ${RUNDIR}/ with a basename
-                   of ${name(1)}.env or ${custom_name(2)}.env if given
+  e, extract   - extract ${name(1)} systemd files from ${image(2)}
+  p, printenv  - print env vars for ${name(1)} to ${out:-STDOUT(2)}
+  w, writeenv  - write env vars for ${name(1)} to ${RUNDIR}/ with a basename
+                 of ${name(1)}.env or ${custom_name(2)}.env if given
 
-Junk drawer utility stuff
--------------------------
+-- Junk drawer utility stuff --
 
-    d, urldecode - print URL-decoded/unescaped ${strings(*)}
+  d, urldecode - print URL-decoded/unescaped ${strings(*)}
 
 EOUSAGE
   exit "${1:-0}"
@@ -64,7 +62,7 @@ __run_printenv() {
 
   local out="${2}"
 
-  : "${ETCDEFAULT:=/etc/default}"
+  : "${ETCDIR:=/etc}"
 
   if [[ "${out}" ]]; then
     echo "${out}"
@@ -77,17 +75,17 @@ __run_printenv() {
     "${name}" \
     "${name}-cloud-init" \
     "${name}-local"; do
-    if [ -f "${ETCDEFAULT}/${config_file}" ]; then
-      echo "# ${ETCDEFAULT}/${config_file}"
+    if [ -f "${ETCDIR}/default/${config_file}" ]; then
+      echo "# ${ETCDIR}/default/${config_file}"
       while read -r line; do
         line="${line//\'/}"
         echo "${line//\"/}"
-      done <"${ETCDEFAULT}/${config_file}"
+      done <"${ETCDIR}/default/${config_file}"
     fi
   done
 }
 
-__run_p() { __run_printenv; }
+__run_p() { __run_printenv "${@}"; }
 
 __run_writeenv() {
   local dest_basename="${2:-${1}}"
@@ -116,14 +114,19 @@ __run_extract() {
 
   mkdir -p "${extract_dir}"
 
-  docker run -d --rm -v "${extract_dir}:/app" "${image}" sh -c "sleep 10"
+  local tmpcontainer
+  tmpcontainer="$(docker run -d --rm "${image}" sh -c "sleep 10")"
 
-  if [[ -f "${extract_dir}/systemd.service" ]]; then
-    cp -v "${extract_dir}/systemd.service" "${service_dest}"
+  if docker cp "${tmpcontainer}:/app/systemd.service" "${service_dest}"; then
+    systemctl enable "${name}"
+  else
+    echo "No systemd.service file found for ${name}" >&2
   fi
 
-  if [[ -f "${extract_dir}/systemd-wrapper" ]]; then
-    cp -v "${extract_dir}/systemd-wrapper" "${wrapper_dest}"
+  if docker cp "${tmpcontainer}:/app/systemd-wrapper" "${wrapper_dest}"; then
+    chmod +x "${wrapper_dest}"
+  else
+    echo "No systemd wrapper executable found for ${name}" >&2
   fi
 }
 
