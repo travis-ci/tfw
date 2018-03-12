@@ -5,6 +5,7 @@ set -o pipefail
 
 __TFW_VERSION__='v0.1.0'
 declare -A __TFW_ALIASES__
+declare -A __TFW_HELP_DOC__
 
 main() {
   if [[ "${DEBUG}" ]]; then
@@ -20,7 +21,7 @@ main() {
   if "__run_${command}" "${@}"; then
     exit 0
   fi
-  __run_help 1
+  __run_help '' 1
 }
 
 aka() {
@@ -31,6 +32,12 @@ aka() {
   done
 }
 
+doc() {
+  local topic="${1}"
+  shift || true
+  __TFW_HELP_DOC__[${topic}]="$*"
+}
+
 __die() {
   echo "${*}" >&2
   exit 2
@@ -38,10 +45,20 @@ __die() {
 
 aka help h -h --help
 __run_help() {
+  local topic="${1}"
+  local exit_code="${2:-0}"
+
+  if [[ "${__TFW_HELP_DOC__[${topic}]}" ]]; then
+    cat <<<"${__TFW_HELP_DOC__[${topic}]}"
+    exit "${exit_code}"
+  else
+    echo "ERROR: No help available for topic '${topic}'" >&2
+  fi
+
   cat <<'EOUSAGE'
 Usage: tfw <command> [${more-stuff(1)}, ${maybe(2)}]
 
-  h, help    - echo this string and exit
+  h, help    - echo this string and exit or get help for another command
   v, version - echo version and exit
 
 Docker image configuration and deployment stuff:
@@ -56,7 +73,7 @@ Junk drawer utility stuff:
   d, urldecode - print URL-decoded/unescaped ${strings(*)}
 
 EOUSAGE
-  exit "${1:-0}"
+  exit "${exit_code}"
 }
 
 aka version v -v --version
@@ -66,6 +83,14 @@ __run_version() {
 }
 
 aka urldecode d
+doc urldecode \
+"Usage: tfw urldecode <url-encoded-string> [url-encoded-string, ...]
+
+URL-decode any number of positional argument strings, handling 'quote plus'
+encoding as well, e.g.
+
+  tfw urldecode what%2Fthe+what%3F
+"
 __run_urldecode() {
   : "${*//+/ }"
   echo -e "${_//%/\\x}"
@@ -136,14 +161,14 @@ __run_extract() {
   if docker cp "${tmpcontainer}:/app/systemd.service" "${service_dest}"; then
     echo "Extracted ${service_dest}"
   else
-    echo "No systemd.service file found for ${name}" >&2
+    echo "WARN: No systemd.service file found for ${name}" >&2
   fi
 
   if docker cp "${tmpcontainer}:/app/systemd-wrapper" "${wrapper_dest}"; then
     chmod +x "${wrapper_dest}"
     echo "Extracted ${wrapper_dest}"
   else
-    echo "No systemd wrapper executable found for ${name}" >&2
+    echo "WARN: No systemd wrapper executable found for ${name}" >&2
   fi
 }
 

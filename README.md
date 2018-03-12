@@ -9,3 +9,17 @@
 This repository contains a single script, `tfw`, which is intended to be
 downloaded and used for a variety of tasks performed during the process of
 bringing a Docker-empowered VM into service.
+
+## Usage
+
+Ask for help:
+
+``` bash
+tfw help
+```
+
+Ask for help about a particular command:
+
+``` bash
+tfw help printenv
+```
