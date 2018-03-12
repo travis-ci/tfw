@@ -5,9 +5,9 @@ cache:
   directories:
   - "${HOME}/bin"
 install:
-- make distclean
 - make ensure-shellcheck ensure-shfmt
-- make deps
 script:
 - make lint
+- git diff --exit-code
+- git diff --cached --exit-code
 - make test

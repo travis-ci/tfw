@@ -2,30 +2,16 @@ SHELLCHECK_URL := https://www.googleapis.com/download/storage/v1/b/shellcheck/o/
 SHFMT_URL := https://github.com/mvdan/sh/releases/download/v2.2.0/shfmt_v2.2.0_linux_amd64
 
 .PHONY: all
-all: clean test
-
-.PHONY: clean
-clean:
-	$(RM) -r tmp/*
-
-.PHONY: distclean
-distclean: clean
-	$(RM) .deps-fetched
+all: test
 
 .PHONY: test
-test: deps
+test:
 	bats $(wildcard *.bats)
 
-.PHONY: deps
-deps: .deps-fetched
-
 .PHONY: lint
-lint: deps
+lint:
 	shellcheck tfw
 	shfmt -i 2 -w tfw
-
-.deps-fetched:
-	@date -u --iso-8601=s >$@
 
 .PHONY: ensure-shellcheck
 ensure-shellcheck:
