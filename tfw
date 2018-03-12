@@ -10,7 +10,9 @@ main() {
 
   local command="${1}"
   shift || true
-  "__run_${command}" "${@}" && exit 1
+  if "__run_${command}" "${@}"; then
+    exit 0
+  fi
   __run_help 1
 }
 
@@ -39,7 +41,7 @@ Junk drawer utility stuff
     d, urldecode - print URL-decoded/unescaped ${strings(*)}
 
 EOUSAGE
-exit "${1:-0}"
+  exit "${1:-0}"
 }
 
 __run_--help() { __run_help; }
@@ -75,14 +77,14 @@ __run_printenv() {
     "${name}" \
     "${name}-cloud-init" \
     "${name}-local"; do
-  if [ -f "${ETCDEFAULT}/${config_file}" ]; then
-    echo "# ${ETCDEFAULT}/${config_file}"
-    while read -r line; do
-      line="${line//\'/}"
-      echo "${line//\"/}"
-    done <"${ETCDEFAULT}/${config_file}"
-  fi
-done
+    if [ -f "${ETCDEFAULT}/${config_file}" ]; then
+      echo "# ${ETCDEFAULT}/${config_file}"
+      while read -r line; do
+        line="${line//\'/}"
+        echo "${line//\"/}"
+      done <"${ETCDEFAULT}/${config_file}"
+    fi
+  done
 }
 
 __run_p() { __run_printenv; }
@@ -108,8 +110,6 @@ __run_extract() {
     __die 'Missing positional argument for image'
   fi
 
-  local nowish
-  nowish="$(date +%s)"
   local extract_dir="${RUNDIR:-/var/tmp/travis-run.d}/${name}-extract.d"
   local service_dest="${ETCDIR:-/etc}/systemd/system/${name}.service"
   local wrapper_dest="${USRSBINDIR:-/usr/sbin}/${name}-wrapper"

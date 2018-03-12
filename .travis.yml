@@ -1,4 +1,11 @@
 language: bash
-sudo: required
-install: make deps
-script: make test
+cache:
+  directories:
+  - "${HOME}/bin"
+install:
+- make distclean
+- make ensure-shellcheck ensure-shfmt
+- make deps
+script:
+- make lint
+- make test
