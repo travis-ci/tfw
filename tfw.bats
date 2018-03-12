@@ -52,10 +52,26 @@ teardown() {
   done
 }
 
+@test "tfw help urldecode/d shows help" {
+  for word in 'urldecode' 'd'; do
+    run ./tfw help "${word}"
+    [[ "${output}" =~ Usage: ]]
+    [[ "${status}" -eq 0 ]]
+  done
+}
+
 @test "tfw urldecode/d decodes stuff and exits 0" {
   for word in 'urldecode' 'd'; do
     run ./tfw "${word}" 'what%2Fthe+what%3F'
     [[ "${output}" == "what/the what?" ]]
+    [[ "${status}" -eq 0 ]]
+  done
+}
+
+@test "tfw help printenv/p shows help" {
+  for word in 'printenv' 'p'; do
+    run ./tfw help "${word}"
+    [[ "${output}" =~ Usage: ]]
     [[ "${status}" -eq 0 ]]
   done
 }
@@ -85,6 +101,14 @@ teardown() {
   done
 }
 
+@test "tfw help writeenv/w shows help" {
+  for word in 'writeenv' 'w'; do
+    run ./tfw help "${word}"
+    [[ "${output}" =~ Usage: ]]
+    [[ "${status}" -eq 0 ]]
+  done
+}
+
 @test "tfw writeenv/w without args exits 2" {
   for word in 'writeenv' 'w'; do
     run ./tfw "${word}"
@@ -107,6 +131,14 @@ teardown() {
     source "${RUNDIR}/tfwtest-1.env"
     [[ "${status}" -eq 0 ]]
     [[ "${TFW_BOOPS}" == 9003 ]]
+  done
+}
+
+@test "tfw help extract/e shows help" {
+  for word in 'extract' 'e'; do
+    run ./tfw help "${word}"
+    [[ "${output}" =~ Usage: ]]
+    [[ "${status}" -eq 0 ]]
   done
 }
 
