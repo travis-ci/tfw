@@ -102,10 +102,11 @@ __run_urldecode() {
   echo -e "${_//%/\\x}"
 }
 
-def printenv,p "<name> [outfile]
+def printenv,p "<name> [outfile] [-E/--export]
 
 Print the combined configuration for a given thing by name, optionally writing
-to a second \${outfile} argument.
+to a second \${outfile} argument.  If -E/--export is given, then any leading
+\"export \" statements will not be stripped.
 
 NOTE: \${ETCDIR} is used as prefix for \${ETCDIR}/default/"
 __run_printenv() {
@@ -114,8 +115,17 @@ __run_printenv() {
     __error 'Missing positional argument for name'
     __run_help printenv 2
   fi
+  shift
 
-  local out="${2}"
+  local out="${1}"
+  shift || true
+
+  local leave_exports
+  for arg in "${@}"; do
+    if [[ "${arg}" =~ ^-E|--export$ ]]; then
+      leave_exports=1
+    fi
+  done
 
   : "${ETCDIR:=/etc}"
 
@@ -134,6 +144,9 @@ __run_printenv() {
       echo "# ${ETCDIR}/default/${config_file}"
       while read -r line; do
         line="${line//\'/}"
+        if [[ ! "${leave_exports}" ]]; then
+          line="${line##export }"
+        fi
         echo "${line//\"/}"
       done <"${ETCDIR}/default/${config_file}"
     fi
