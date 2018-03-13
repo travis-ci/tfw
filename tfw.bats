@@ -86,6 +86,17 @@ teardown() {
 @test "tfw printenv/p tfwtest prints stuff and exits 0" {
   for word in 'printenv' 'p'; do
     run ./tfw "${word}" tfwtest
+    [[ ! "${output}" =~ export ]]
+    eval "${output}"
+    [[ "${status}" -eq 0 ]]
+    [[ "${TFW_BOOPS}" == 9003 ]]
+  done
+}
+
+@test "tfw printenv/p tfwtest --export prints stuff and exits 0" {
+  for word in 'printenv' 'p'; do
+    run ./tfw "${word}" tfwtest '' --export
+    [[ "${output}" =~ export ]]
     eval "${output}"
     [[ "${status}" -eq 0 ]]
     [[ "${TFW_BOOPS}" == 9003 ]]
