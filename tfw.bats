@@ -15,7 +15,7 @@ setup() {
   export ETCDIR="${BATS_TMPDIR}/tfw/etc"
   export RUNDIR="${BATS_TMPDIR}/tfw/var/tmp/travis-run.d"
   export USRSBINDIR="${BATS_TMPDIR}/tfw/usr/sbin"
-  : "${TFWTEST_IMAGE:=travisci/nat-conntracker:0.3.0-10-g143f6c0}"
+  : "${TFWTEST_IMAGE:=travisci/sleepy-snoozer}"
   export TFWTEST_IMAGE
 
   cat >"${ETCDIR}/default/travis-enterprise" <<'EOF'
@@ -39,6 +39,11 @@ EOF
   cat >"${ETCDIR}/default/tfwtest-local" <<'EOF'
 export TFW_BOOPS=9003
 EOF
+
+  echo 'i-1337801' >"${RUNDIR}/instance-id"
+  echo 'local-test-1337801' >"${RUNDIR}/instance-name"
+  echo '128.0.0.1' >"${RUNDIR}/instance-ipv4"
+  echo 'nz-grayhavens-2' >"${RUNDIR}/instance-region-zone"
 }
 
 teardown() {
@@ -171,9 +176,20 @@ teardown() {
   for word in 'extract' 'e'; do
     run ./tfw "${word}" tfwtest "${TFWTEST_IMAGE}"
     [[ "${status}" -eq 0 ]]
-    [[ -f "${ETCDIR}/systemd/system/tfwtest.service" ]]
-    [[ -f "${USRSBINDIR}/tfwtest-wrapper" ]]
+    [[ -r "${ETCDIR}/systemd/system/tfwtest.service" ]]
+    [[ -x "${USRSBINDIR}/tfwtest-wrapper" ]]
     [[ "${output}" =~ Extracted.+tfwtest.service ]]
     [[ "${output}" =~ Extracted.*tfwtest-wrapper ]]
+
+    local service_content
+    service_content="$(cat "${ETCDIR}/systemd/system/tfwtest.service")"
+    [[ "${service_content}" =~ ExecStart=${USRSBINDIR}/tfwtest-wrapper ]]
+
+    local wrapper_content
+    wrapper_content="$(cat "${USRSBINDIR}/tfwtest-wrapper")"
+    [[ "${wrapper_content}" =~ INSTANCE_ID=i-1337801 ]]
+    [[ "${wrapper_content}" =~ INSTANCE_NAME=local-test-1337801 ]]
+    [[ "${wrapper_content}" =~ INSTANCE_IPV4=128.0.0.1 ]]
+    [[ "${wrapper_content}" =~ ZONE=nz-grayhavens-2 ]]
   done
 }

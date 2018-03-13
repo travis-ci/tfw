@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# systemd wrapper script expected to be installed at ___SYSTEMD_WRAPPER___ for
+# use by adjacent systemd.service file
+set -o errexit
+set -o pipefail
+
+main() {
+  local name="${1:-sleepy-snoozer}"
+
+  eval "$(tfw printenv sleepy-snoozer)"
+
+  : "${SLEEPY_SNOOZER_SELF_IMAGE:-travisci/tfw-sleepy-snoozer}"
+
+  docker stop "${name}" &>/dev/null || true
+  docker rm -f "${name}" &>/dev/null || true
+
+  local env_file
+  env_file="$(tfw writeenv sleepy-snoozer "${name}")"
+  cat >>"${env_file}" <<-'EOF'
+
+# runtime-appended
+INSTANCE_NAME=___INSTANCE_NAME___
+INSTANCE_ID=___INSTANCE_ID___
+INSTANCE_IPV4=___INSTANCE_IPV4___
+ZONE=___REGION_ZONE___
+EOF
+
+  exec docker run \
+    --rm \
+    --user nobody \
+    --name "${name}" \
+    --env-file "${env_file}" \
+    "${SLEEPY_SNOOZER_SELF_IMAGE}"
+}
+
+main "$@"

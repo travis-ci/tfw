@@ -1,0 +1,12 @@
+# Service definition for ___INSTANCE_NAME___ to be installed somewhere in the
+# systemd load path
+[Unit]
+Description=Sleepy Snoozer
+
+[Service]
+ExecStart=___SYSTEMD_WRAPPER___
+Restart=always
+WorkingDirectory=/
+
+[Install]
+WantedBy=multi-user.target
