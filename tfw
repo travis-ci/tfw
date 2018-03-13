@@ -294,7 +294,8 @@ __run_extract() {
     __run_help extract 2
   fi
 
-  local tmp_dest_prefix="$(mktemp -d)"
+  local tmp_dest_prefix
+  tmp_dest_prefix="$(mktemp -d)"
   local service_dest="${ETCDIR:-/etc}/systemd/system/${name}.service"
   local service_dest_tmp="${tmp_dest_prefix}/${name}.service"
   local wrapper_dest="${USRSBINDIR:-/usr/sbin}/${name}-wrapper"
@@ -423,9 +424,9 @@ __get_instance_region_zone() {
 
 __ensure_instance_metadata() {
   if [[ -s "${RUNDIR}/instance-id" ]] &&
-     [[ -s "${RUNDIR}/instance-name" ]] &&
-     [[ -s "${RUNDIR}/instance-ipv4" ]] &&
-     [[ -s "${RUNDIR}/instance-region-zone" ]]; then
+    [[ -s "${RUNDIR}/instance-name" ]] &&
+    [[ -s "${RUNDIR}/instance-ipv4" ]] &&
+    [[ -s "${RUNDIR}/instance-region-zone" ]]; then
     return
   fi
 
@@ -464,7 +465,7 @@ __fetch_instance_metadata_ec2() {
 __fetch_instance_metadata_gce() {
   local gce_metadata='http://metadata.google.internal/computeMetadata/v1'
   if ! curl --connect-timeout 3 -sfSL -H 'Metadata-Flavor: Google' \
-      "${gce_metadata}/instance" &>/dev/null; then
+    "${gce_metadata}/instance" &>/dev/null; then
     return 1
   fi
 
