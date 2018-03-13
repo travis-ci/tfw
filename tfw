@@ -16,6 +16,14 @@ main() {
     eval "__run_${key}() { __run_${__TFW_ALIASES__[${key}]} \"\${@}\"; }"
   done
 
+  : "${ETCDIR:=/etc}"
+  : "${RUNDIR:=/var/tmp/travis-run.d}"
+  : "${TMPDIR:=/tmp}"
+  : "${USRBINDIR:=/usr/bin}"
+  : "${USRSBINDIR:=/usr/sbin}"
+  : "${VARCACHEDIR:=/var/cache}"
+  : "${VARLIBDIR:=/var/lib}"
+
   local command="${1}"
   shift || true
   if "__run_${command:-help}" "${@}"; then
@@ -69,6 +77,8 @@ tfw <command> [${more-stuff(1)}, ${maybe(2)}]
   help, h, -h, --help       - echo this string or get help for another command
   version, v, -v, --version - echo version and exit
 
+  bootstrap, b
+
 Docker image configuration and deployment stuff:
 
   extract, e
@@ -77,7 +87,8 @@ Docker image configuration and deployment stuff:
 
 Junk drawer utility stuff:
 
-  d, urldecode
+  urldecode, d
+  gsub, g
 
 EOUSAGE
   exit "${exit_code}"
@@ -100,6 +111,64 @@ encoding as well, e.g.
 __run_urldecode() {
   : "${*//+/ }"
   echo -e "${_//%/\\x}"
+}
+
+def bootstrap,b "
+Ensure dependencies are present on the system; intended to be run early in
+instance preparation.
+
+NOTE: \${RUNDIR} is used as prefix for cached calculated values
+NOTE: \${TMPDIR} is used for temporary file bits
+NOTE: \${USRBINDIR} is used as prefix installed executables
+"
+__run_bootstrap() {
+  mkdir -p "${RUNDIR}"
+
+  __bootstrap_jq
+  __bootstrap_apt
+}
+
+__bootstrap_jq() {
+  if jq --version; then
+    return
+  fi
+
+  curl -sSL \
+    -o "${TMPDIR}/jq" \
+    'https://github.com/stedolan/jq/releases/download/jq-1.5/jq-linux64'
+  chmod +x "${TMPDIR}/jq"
+  mv -v "${TMPDIR}/jq" "${USRBINDIR}/jq"
+}
+
+__bootstrap_apt() {
+  if ! apt-get --version &>/dev/null; then
+    return
+  fi
+
+  systemctl disable apt-daily || true
+  systemctl stop apt-daily || true
+  systemctl disable apt-daily-upgrade || true
+  systemctl stop apt-daily-upgrade || true
+
+  apt-get update -yqq
+  touch "${VARLIBDIR}/apt/periodic/update-success-stamp"
+
+  for d in "${VARCACHEDIR}/local" "${VARCACHEDIR}/local/preseeding"; do
+    mkdir -p "${d}"
+    chown root:root "${d}"
+    chmod 0755 "${d}"
+  done
+
+  apt-get install -yqq \
+    apt-transport-https \
+    curl \
+    debian-archive-keyring \
+    openssh-client \
+    openssh-server \
+    rsyslog \
+    rsyslog-gnutls \
+    software-properties-common \
+    sudo
 }
 
 def printenv,p "<name> [outfile] [-E/--export]
@@ -126,8 +195,6 @@ __run_printenv() {
       leave_exports=1
     fi
   done
-
-  : "${ETCDIR:=/etc}"
 
   if [[ "${out}" ]]; then
     echo "${out}"
@@ -191,24 +258,88 @@ __run_extract() {
     __run_help extract 2
   fi
 
+  local tmp_dest_prefix="$(mktemp)"
   local service_dest="${ETCDIR:-/etc}/systemd/system/${name}.service"
+  local service_dest_tmp="${tmp_dest_prefix}/${name}.service"
   local wrapper_dest="${USRSBINDIR:-/usr/sbin}/${name}-wrapper"
+  local wrapper_dest_tmp="${tmp_dest_prefix}/${name}-wrapper"
 
   local tmpcontainer
   tmpcontainer="$(docker run -d --rm "${image}" sh -c "sleep 10")"
 
-  if docker cp "${tmpcontainer}:/app/systemd.service" "${service_dest}"; then
+  if docker cp "${tmpcontainer}:/app/systemd.service" "${service_dest_tmp}"; then
+    __run_gsub "${service_dest_tmp}" "${service_dest}"
     echo "Extracted ${service_dest}"
   else
     echo "WARN: No systemd.service file found for ${name}" >&2
   fi
 
-  if docker cp "${tmpcontainer}:/app/systemd-wrapper" "${wrapper_dest}"; then
+  if docker cp "${tmpcontainer}:/app/systemd-wrapper" "${wrapper_dest_tmp}"; then
+    __run_gsub "${wrapper_dest_tmp}" "${wrapper_dest}"
     chmod +x "${wrapper_dest}"
     echo "Extracted ${wrapper_dest}"
   else
     echo "WARN: No systemd wrapper executable found for ${name}" >&2
   fi
+}
+
+def gsub,s "<infile> [outfile]
+
+Substitute strings with platform and instance-dependent runtime values,
+optionally writing to an output file.
+
+  ___INSTANCE_ID___   - instance identifier, e.g. i-fafafaf
+  ___INSTANCE_NAME___ - instance name, e.g. production-8-juicero-f-2-gce
+  ___INSTANCE_IPV4___ - instance ipv4 address, e.g. 10.10.9.8
+  ___REGION_ZONE__    - region + zone, e.g. us-central1-d
+"
+__run_gsub() {
+  local infile="${1}"
+  shift || true
+  if [[ ! "${infile}" ]]; then
+    __error 'Missing positional argument for input file'
+    __run_help gsub 2
+  fi
+
+  local out="${1}"
+
+  if [[ "${out}" ]]; then
+    echo "${out}"
+    exec 1>"${out}"
+  fi
+
+  local instance_ipv4 instance_id instance_name region_zone
+  instance_ipv4="$(__get_instance_ipv4)"
+  instance_id="$(__get_instance_id)"
+  instance_name="$(__get_instance_name)"
+  region_zone="$(__get_region_zone)"
+
+  while read -r line; do
+    line="${line//___INSTANCE_IPV4___/${instance_ipv4}}"
+    line="${line//___INSTANCE_ID___/${instance_id}}"
+    line="${line//___INSTANCE_NAME___/${instance_name}}"
+    echo "${line//___REGION_ZONE___/${region_zone}}"
+  done <"${infile}"
+}
+
+__get_instance_ipv4() {
+  local ipa='127.0.0.1'
+  echo "${ipa}"
+}
+
+__get_instance_id() {
+  local iid='i-fafafaf'
+  echo "${iid}"
+}
+
+__get_instance_name() {
+  local inm='notset'
+  echo "${inm}"
+}
+
+__get_region_zone() {
+  local rz='notset'
+  echo "${rz}"
 }
 
 main "${@}"
