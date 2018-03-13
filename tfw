@@ -11,10 +11,31 @@ __TFW_VERSION__='v0.1.0'
 declare -A __TFW_ALIASES__
 declare -A __TFW_HELP_DOC__
 
+__TFW_DEPENDENCIES__=(
+  'awk'
+  'bash'
+  'cat'
+  'curl'
+  'cut'
+  'dirname'
+  'docker'
+  'jq'
+  'mktemp'
+  'tee'
+)
+
 main() {
   for key in "${!__TFW_ALIASES__[@]}"; do
     eval "__run_${key}() { __run_${__TFW_ALIASES__[${key}]} \"\${@}\"; }"
   done
+
+  : "${ETCDIR:=/etc}"
+  : "${RUNDIR:=/var/tmp/travis-run.d}"
+  : "${TMPDIR:=/tmp}"
+  : "${USRBINDIR:=/usr/bin}"
+  : "${USRSBINDIR:=/usr/sbin}"
+  : "${VARCACHEDIR:=/var/cache}"
+  : "${VARLIBDIR:=/var/lib}"
 
   local command="${1}"
   shift || true
@@ -42,7 +63,15 @@ def() {
 }
 
 __error() {
-  echo "ERROR: ${*}" >&2
+  echo "tfw:ERROR: ${*}" >&2
+}
+
+__warn() {
+  echo "tfw:WARN: ${*}" >&2
+}
+
+__info() {
+  echo "tfw:INFO: ${*}" >&2
 }
 
 def help,h,-h,--help "[topic] [exit-code]
@@ -69,6 +98,8 @@ tfw <command> [${more-stuff(1)}, ${maybe(2)}]
   help, h, -h, --help       - echo this string or get help for another command
   version, v, -v, --version - echo version and exit
 
+  bootstrap, b
+
 Docker image configuration and deployment stuff:
 
   extract, e
@@ -77,7 +108,8 @@ Docker image configuration and deployment stuff:
 
 Junk drawer utility stuff:
 
-  d, urldecode
+  urldecode, d
+  gsub, g
 
 EOUSAGE
   exit "${exit_code}"
@@ -100,6 +132,79 @@ encoding as well, e.g.
 __run_urldecode() {
   : "${*//+/ }"
   echo -e "${_//%/\\x}"
+}
+
+def bootstrap,b "
+Ensure dependencies are present on the system; intended to be run early in
+instance preparation.
+
+NOTE: \${RUNDIR} is used as prefix for cached calculated values
+NOTE: \${TMPDIR} is used for temporary file bits
+NOTE: \${USRBINDIR} is used as prefix installed executables
+"
+__run_bootstrap() {
+  mkdir -p "${RUNDIR}"
+
+  __bootstrap_jq
+  __bootstrap_apt
+  __bootstrap_docker
+
+  for cmd in "${__TFW_DEPENDENCIES__[@]}"; do
+    if ! command -v "${cmd}" &>/dev/null; then
+      __warn "Could not find dependency '${cmd}'"
+    fi
+  done
+}
+
+__bootstrap_jq() {
+  if jq --version; then
+    return
+  fi
+
+  curl -sSL \
+    -o "${TMPDIR}/jq" \
+    'https://github.com/stedolan/jq/releases/download/jq-1.5/jq-linux64'
+  chmod +x "${TMPDIR}/jq"
+  mv -v "${TMPDIR}/jq" "${USRBINDIR}/jq"
+}
+
+__bootstrap_apt() {
+  if ! apt-get --version &>/dev/null; then
+    return
+  fi
+
+  systemctl disable apt-daily || true
+  systemctl stop apt-daily || true
+  systemctl disable apt-daily-upgrade || true
+  systemctl stop apt-daily-upgrade || true
+
+  apt-get update -yqq
+  touch "${VARLIBDIR}/apt/periodic/update-success-stamp"
+
+  for d in "${VARCACHEDIR}/local" "${VARCACHEDIR}/local/preseeding"; do
+    mkdir -p "${d}"
+    chown root:root "${d}"
+    chmod 0755 "${d}"
+  done
+
+  apt-get install -yqq \
+    apt-transport-https \
+    curl \
+    debian-archive-keyring \
+    openssh-client \
+    openssh-server \
+    rsyslog \
+    rsyslog-gnutls \
+    software-properties-common \
+    sudo
+}
+
+__bootstrap_docker() {
+  if docker version; then
+    return
+  fi
+
+  curl -sSL https://get.docker.io | bash
 }
 
 def printenv,p "<name> [outfile] [-E/--export]
@@ -126,8 +231,6 @@ __run_printenv() {
       leave_exports=1
     fi
   done
-
-  : "${ETCDIR:=/etc}"
 
   if [[ "${out}" ]]; then
     echo "${out}"
@@ -191,24 +294,208 @@ __run_extract() {
     __run_help extract 2
   fi
 
+  local tmp_dest_prefix
+  tmp_dest_prefix="$(mktemp -d)"
   local service_dest="${ETCDIR:-/etc}/systemd/system/${name}.service"
+  local service_dest_tmp="${tmp_dest_prefix}/${name}.service"
   local wrapper_dest="${USRSBINDIR:-/usr/sbin}/${name}-wrapper"
+  local wrapper_dest_tmp="${tmp_dest_prefix}/${name}-wrapper"
 
   local tmpcontainer
   tmpcontainer="$(docker run -d --rm "${image}" sh -c "sleep 10")"
 
-  if docker cp "${tmpcontainer}:/app/systemd.service" "${service_dest}"; then
-    echo "Extracted ${service_dest}"
+  if docker cp "${tmpcontainer}:/app/systemd.service" "${service_dest_tmp}"; then
+    local dest
+    dest="$(__run_gsub "${name}" "${service_dest_tmp}" "${service_dest}")"
+    echo "Extracted ${dest}"
   else
     echo "WARN: No systemd.service file found for ${name}" >&2
   fi
 
-  if docker cp "${tmpcontainer}:/app/systemd-wrapper" "${wrapper_dest}"; then
-    chmod +x "${wrapper_dest}"
-    echo "Extracted ${wrapper_dest}"
+  if docker cp "${tmpcontainer}:/app/systemd-wrapper" "${wrapper_dest_tmp}"; then
+    local dest
+    dest="$(__run_gsub "${name}" "${wrapper_dest_tmp}" "${wrapper_dest}")"
+    if [[ -w "${dest}" ]]; then
+      chmod +x "${dest}"
+      __info "Extracted ${dest}"
+    else
+      __error "Failed to extract ${wrapper_dest}"
+    fi
   else
-    echo "WARN: No systemd wrapper executable found for ${name}" >&2
+    __warn "No systemd wrapper executable found for ${name}"
   fi
+}
+
+def gsub,s "<name> <infile> [outfile]
+
+Substitute strings with platform and instance-dependent runtime values,
+optionally writing to an output file.
+
+  ___INSTANCE_ID___   - instance identifier, e.g. i-fafafaf
+  ___INSTANCE_NAME___ - instance name, e.g. production-8-juicero-f-2-gce
+  ___INSTANCE_IPV4___ - instance ipv4 address, e.g. 10.10.9.8
+  ___REGION_ZONE__    - region + zone, e.g. us-central1-d
+"
+__run_gsub() {
+  local name="${1}"
+  shift
+  local infile="${1}"
+  shift || true
+
+  if [[ ! "${name}" ]]; then
+    __error 'Missing positional argument for name'
+    __run_help gsub 2
+  fi
+
+  if [[ ! "${infile}" ]]; then
+    __error 'Missing positional argument for input file'
+    __run_help gsub 2
+  fi
+
+  if [[ ! -r "${infile}" ]]; then
+    __error 'Input file is not readable'
+    __run_help gsub 2
+  fi
+
+  local out="${1}"
+
+  if [[ "${out}" ]]; then
+    echo "${out}"
+    exec 1>"${out}"
+  fi
+
+  local instance_ipv4 instance_id instance_name region_zone
+  instance_ipv4="$(__get_instance_ipv4)"
+  instance_id="$(__get_instance_id)"
+  instance_name="$(__get_instance_name)"
+  region_zone="$(__get_instance_region_zone)"
+  local systemd_wrapper_path
+  systemd_wrapper_path="${USRSBINDIR}/${name}-wrapper"
+
+  while IFS= read -r line; do
+    line="${line//___SYSTEMD_WRAPPER___/${systemd_wrapper_path}}"
+    line="${line//___INSTANCE_IPV4___/${instance_ipv4}}"
+    line="${line//___INSTANCE_ID___/${instance_id}}"
+    line="${line//___INSTANCE_NAME___/${instance_name}}"
+    line="${line//___REGION_ZONE___/${region_zone}}"
+    echo "${line}"
+  done <"${infile}"
+}
+
+__get_instance_ipv4() {
+  __ensure_instance_metadata
+
+  local value='127.0.0.1'
+  if [[ -s "${RUNDIR}/instance-ipv4" ]]; then
+    value="$(cat "${RUNDIR}/instance-ipv4")"
+  fi
+  echo "${value}"
+}
+
+__get_instance_id() {
+  __ensure_instance_metadata
+
+  local value='i-fafafaf'
+  if [[ -s "${RUNDIR}/instance-id" ]]; then
+    value="$(cat "${RUNDIR}/instance-id")"
+  fi
+  echo "${value}"
+}
+
+__get_instance_name() {
+  __ensure_instance_metadata
+
+  local value='notset'
+  if [[ -s "${RUNDIR}/instance-name" ]]; then
+    value="$(cat "${RUNDIR}/instance-name")"
+  fi
+  echo "${value}"
+}
+
+__get_instance_region_zone() {
+  __ensure_instance_metadata
+
+  local value='notset'
+  if [[ -s "${RUNDIR}/instance-region-zone" ]]; then
+    value="$(cat "${RUNDIR}/instance-region-zone")"
+  fi
+  echo "${value}"
+}
+
+__ensure_instance_metadata() {
+  if [[ -s "${RUNDIR}/instance-id" ]] &&
+    [[ -s "${RUNDIR}/instance-name" ]] &&
+    [[ -s "${RUNDIR}/instance-ipv4" ]] &&
+    [[ -s "${RUNDIR}/instance-region-zone" ]]; then
+    return
+  fi
+
+  if __fetch_instance_metadata_ec2; then
+    return
+  fi
+
+  if __fetch_instance_metadata_gce; then
+    return
+  fi
+
+  if __fetch_instance_metadata_packet; then
+    return
+  fi
+
+  __warn 'Failed to fetch any instance metadata'
+}
+
+__fetch_instance_metadata_ec2() {
+  local ec2_metadata='http://169.254.169.254/latest/meta-data'
+  if ! curl --connect-timeout 3 -sfSL \
+    "${ec2_metadata}/instance-id" &>/dev/null; then
+    return 1
+  fi
+
+  curl -sSL "${ec2_metadata}/instance-id" >"${RUNDIR}/instance-id"
+  local instance_id
+  instance_id="$(cat "${RUNDIR}/instance-id")"
+  echo "${instance_id:0:9}" >"${RUNDIR}/instance-name"
+  curl -sSL "${ec2_metadata}/local-ipv4" >"${RUNDIR}/instance-ipv4"
+  curl -sSL "${ec2_metadata}/placement/availability-zone" \
+    >"${RUNDIR}/instance-region-zone"
+  return 0
+}
+
+__fetch_instance_metadata_gce() {
+  local gce_metadata='http://metadata.google.internal/computeMetadata/v1'
+  if ! curl --connect-timeout 3 -sfSL -H 'Metadata-Flavor: Google' \
+    "${gce_metadata}/instance" &>/dev/null; then
+    return 1
+  fi
+
+  curl -sSL -H 'Metadata-Flavor: Google' \
+    "${gce_metadata}/instance/id" >"${RUNDIR}/instance-id"
+  curl -sSL -H 'Metadata-Flavor: Google' \
+    "${gce_metadata}/instance/name" >"${RUNDIR}/instance-name"
+  curl -sSL -H 'Metadata-Flavor: Google' \
+    "${gce_metadata}/instance/network-interfaces/0/ip" \
+    >"${RUNDIR}/instance-ipv4"
+  curl -sSL -H 'Metadata-Flavor: Google' \
+    "${gce_metadata}/instance/zone" |
+    awk -F/ '{ print $NF }' >"${RUNDIR}/instance-region-zone"
+  return 0
+}
+
+__fetch_instance_metadata_packet() {
+  local packet_metadata='https://metadata.packet.net/metadata'
+  if ! curl --connect-timeout 3 -sfSL "${packet_metadata}" &>/dev/null; then
+    return 1
+  fi
+
+  curl -sSL "${packet_metadata}" >"${RUNDIR}/metadata.json"
+  jq -r .id <"${RUNDIR}/metadata.json" | cut -d- -f 1 |
+    tee "${RUNDIR}/instance-name" >"${RUNDIR}/instance-id"
+  jq -r ".network.addresses | .[] | \
+    select(.address_family==4 and .public==false) | \
+    .address" <"${RUNDIR}/metadata.json" >"${RUNDIR}/instance-ipv4"
+  jq -r .facility <"${RUNDIR}/metadata.json" >"${RUNDIR}/instance-region-zone"
+  return 0
 }
 
 main "${@}"
