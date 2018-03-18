@@ -123,6 +123,7 @@ Junk drawer utility stuff:
 
 Administrivia:
 
+  admin-bootstrap
   admin-users
   admin-travis-sudo
   admin-ssh
@@ -516,6 +517,61 @@ __fetch_instance_metadata_packet() {
   return 0
 }
 
+def admin-bootstrap "
+
+Run all admin-* tasks, attempting to fetch configuration from \${ETCDIR}/default
+files in the following order, with relevant variables:
+
+\${ETCDIR}/default/tfw
+  + TFW_FAIL2BAN_SSH_BANTIME - int for fail2ban ssh jail ban time
+  + TFW_FAIL2BAN_SSH_MAXRETRY - int for fail2ban ssh jail ban retries
+  + TFW_GITHUB_USERS - \" \"-delimited username:github-login pairs
+  + TFW_SSH_KEYALGO_BITS  - \" \"-delimited algo:nbits pairs for ssh keygen
+
+\${ETCDIR}/default/fail2ban-ssh
+  + FAIL2BAN_SSH_BANTIME (falls back to TFW_FAIL2BAN_SSH_BANTIME)
+  + FAIL2BAN_SSH_MAXRETRY (falls back to TFW_FAIL2BAN_SSH_MAXRETRY)
+
+\${ETCDIR}/default/github-users
+  + GITHUB_USERS (falls back to TFW_GITHUB_USERS)
+"
+__run_admin-bootstrap() {
+  if [[ -f "${ETCDIR}/default/tfw" ]]; then
+    # shellcheck source=/dev/null
+    source "${ETCDIR}/default/tfw"
+  fi
+
+  if [[ -f "${ETCDIR}/default/fail2ban-ssh" ]]; then
+    # shellcheck source=/dev/null
+    source "${ETCDIR}/default/fail2ban-ssh"
+
+    export "${FAIL2BAN_SSH_MAXRETRY:-${TFW_FAIL2BAN_SSH_MAXRETRY}}"
+    export "${FAIL2BAN_SSH_BANTIME:-${TFW_FAIL2BAN_SSH_BANTIME}}"
+  fi
+
+  if [[ -f "${ETCDIR}/default/github-users" ]]; then
+    # shellcheck source=/dev/null
+    source "${ETCDIR}/default/github-users"
+
+    export "${GITHUB_USERS:-${TFW_GITHUB_USERS}}"
+  fi
+
+  local github_users
+  read -r -a github_users <<<"${GITHUB_USERS}"
+  __run_admin-users "${github_users[@]}"
+
+  __run_admin-travis-sudo
+
+  local ssh_keyalgo_bits
+  read -r -a ssh_keyalgo_bits <<<"${TFW_SSH_KEYALGO_BITS}"
+  __run_admin-ssh \
+    "${FAIL2BAN_SSH_MAXRETRY}" "${FAIL2BAN_SSH_BANTIME}" \
+    "${ssh_keyalgo_bits[@]}"
+
+  __run_admin-hostname "${TFW_HOSTNAME_TEMPLATE}"
+  __run_admin-rsyslog "${TFW_SYSLOG_ADDRESS}"
+}
+
 def admin-users "<username:github-login> [username:github-login, ]
 
 Ensure local users exist with SSH authorized keys added from GitHub.
@@ -587,34 +643,34 @@ def admin-travis-sudo "
 
 Disable sudo access for travis user if it exists.
 "
-__run_admin-sudo() {
+__run_admin-travis-sudo() {
   rm -vf "${ETCDIR}/sudoers.d/travis"
 }
 
-def admin-ssh "
+def admin-ssh "[ssh-maxretry] [ssh-bantime] [keyalgo:bits, keyalgo:bits, ...]
 
 Enable and configure SSH server keys and fail2ban SSH jail.
 "
 __run_admin-ssh() {
-  __enable_fail2ban_ssh_jail
-  __ensure_server_ssh_keys
+  local ssh_maxretry="${1}"
+  shift || true
+  local ssh_bantime="${2}"
+  shift || true
+  __enable_fail2ban_ssh_jail "${ssh_maxretry}" "${ssh_bantime}"
+  __ensure_server_ssh_keys "${@}"
 }
 
 __enable_fail2ban_ssh_jail() {
+  local ssh_maxretry="${1:-4}"
+  local ssh_bantime="${2:-86400}"
   local confdir="${ETCDIR}/fail2ban"
-  local envfile="${ETCDIR}/default/fail2ban-ssh"
-
-  if [[ -f "${envfile}" ]]; then
-    # shellcheck source=/dev/null
-    source "${envfile}"
-  fi
 
   cat >"${confdir}/jail.d/99-enable-ssh.local" <<EOF
 # Written via tfw :heart:
 [ssh]
 enabled = true
-maxretry = ${FAIL2BAN_SSH_MAXRETRY:=4}
-bantime = ${FAIL2BAN_SSH_BANTIME:=86400}
+maxretry = ${ssh_maxretry}
+bantime = ${ssh_bantime}
 EOF
 
   systemctl stop fail2ban || true
@@ -622,7 +678,13 @@ EOF
 }
 
 __ensure_server_ssh_keys() {
-  for key in rsa:4096 ecdsa:521 ed25519:256; do
+  local ssh_keys="${@}"
+
+  if [[ "${#ssh_keys[@]}" -eq 0 ]]; then
+    ssh_keys=( rsa:4096 ecdsa:521 ed25519:256 )
+  fi
+
+  for key in "${ssh_keys[@]}" ; do
     local keytype="${key%%:*}"
     local keybits="${key##*:}"
     local keyfile="${ETCDIR}/ssh/ssh_host_${keytype}_key"
