@@ -73,23 +73,23 @@ teardown() {
   done
 }
 
-@test "tfw help printenv/p shows help" {
-  for word in 'printenv' 'p'; do
+@test "tfw help app-printenv/printenv/p shows help" {
+  for word in 'app-printenv' 'printenv' 'p'; do
     run ./tfw help "${word}"
     [[ "${output}" =~ Usage: ]]
     [[ "${status}" -eq 0 ]]
   done
 }
 
-@test "tfw printenv/p without args exits 2" {
-  for word in 'printenv' 'p'; do
+@test "tfw app-printenv/printenv/p without args exits 2" {
+  for word in 'app-printenv' 'printenv' 'p'; do
     run ./tfw "${word}"
     [[ "${status}" -eq 2 ]]
   done
 }
 
-@test "tfw printenv/p tfwtest prints stuff and exits 0" {
-  for word in 'printenv' 'p'; do
+@test "tfw app-printenv/printenv/p tfwtest prints stuff and exits 0" {
+  for word in 'app-printenv' 'printenv' 'p'; do
     run ./tfw "${word}" tfwtest
     [[ ! "${output}" =~ export ]]
     eval "${output}"
@@ -98,8 +98,8 @@ teardown() {
   done
 }
 
-@test "tfw printenv/p tfwtest --export prints stuff and exits 0" {
-  for word in 'printenv' 'p'; do
+@test "tfw app-printenv/printenv/p tfwtest --export prints stuff and exits 0" {
+  for word in 'app-printenv' 'printenv' 'p'; do
     run ./tfw "${word}" tfwtest '' --export
     [[ "${output}" =~ export ]]
     eval "${output}"
@@ -108,8 +108,8 @@ teardown() {
   done
 }
 
-@test "tfw printenv/p notset prints stuff and exits 0" {
-  for word in 'printenv' 'p'; do
+@test "tfw app-printenv/printenv/p notset prints stuff and exits 0" {
+  for word in 'app-printenv' 'printenv' 'p'; do
     run ./tfw "${word}" notset
     eval "${output}"
     [[ "${status}" -eq 0 ]]
@@ -117,23 +117,23 @@ teardown() {
   done
 }
 
-@test "tfw help writeenv/w shows help" {
-  for word in 'writeenv' 'w'; do
+@test "tfw help app-writeenv/writeenv/w shows help" {
+  for word in 'app-writeenv' 'writeenv' 'w'; do
     run ./tfw help "${word}"
     [[ "${output}" =~ Usage: ]]
     [[ "${status}" -eq 0 ]]
   done
 }
 
-@test "tfw writeenv/w without args exits 2" {
-  for word in 'writeenv' 'w'; do
+@test "tfw app-writeenv/writeenv/w without args exits 2" {
+  for word in 'app-writeenv' 'writeenv' 'w'; do
     run ./tfw "${word}"
     [[ "${status}" -eq 2 ]]
   done
 }
 
-@test "tfw writeenv/w tfwtest writes stuff and exits 0" {
-  for word in 'writeenv' 'w'; do
+@test "tfw app-writeenv/writeenv/w tfwtest writes stuff and exits 0" {
+  for word in 'app-writeenv' 'writeenv' 'w'; do
     run ./tfw "${word}" tfwtest
     source "${RUNDIR}/tfwtest.env"
     [[ "${status}" -eq 0 ]]
@@ -141,8 +141,8 @@ teardown() {
   done
 }
 
-@test "tfw writeenv/w tfwtest tfwtest-1 writes stuff and exits 0" {
-  for word in 'writeenv' 'w'; do
+@test "tfw app-writeenv/writeenv/w tfwtest tfwtest-1 writes stuff and exits 0" {
+  for word in 'app-writeenv' 'writeenv' 'w'; do
     run ./tfw "${word}" tfwtest tfwtest-1
     source "${RUNDIR}/tfwtest-1.env"
     [[ "${status}" -eq 0 ]]
@@ -150,30 +150,30 @@ teardown() {
   done
 }
 
-@test "tfw help extract/e shows help" {
-  for word in 'extract' 'e'; do
+@test "tfw help app-extract/extract/e shows help" {
+  for word in 'app-extract' 'extract' 'e'; do
     run ./tfw help "${word}"
     [[ "${output}" =~ Usage: ]]
     [[ "${status}" -eq 0 ]]
   done
 }
 
-@test "tfw extract/e without args exits 2" {
-  for word in 'extract' 'e'; do
+@test "tfw app-extract/extract/e without args exits 2" {
+  for word in 'app-extract' 'extract' 'e'; do
     run ./tfw "${word}"
     [[ "${status}" -eq 2 ]]
   done
 }
 
-@test "tfw extract/e tfwtest exits 2" {
-  for word in 'extract' 'e'; do
+@test "tfw app-extract/extract/e tfwtest exits 2" {
+  for word in 'app-extract' 'extract' 'e'; do
     run ./tfw "${word}" tfwtest
     [[ "${status}" -eq 2 ]]
   done
 }
 
-@test "tfw extract/e tfwtest <image> extracts stuff and exits 0" {
-  for word in 'extract' 'e'; do
+@test "tfw app-extract/extract/e tfwtest <image> extracts stuff and exits 0" {
+  for word in 'app-extract' 'extract' 'e'; do
     run ./tfw "${word}" tfwtest "${TFWTEST_IMAGE}"
     [[ "${status}" -eq 0 ]]
     [[ -r "${ETCDIR}/systemd/system/tfwtest.service" ]]
