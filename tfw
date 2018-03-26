@@ -545,15 +545,15 @@ __run_admin-bootstrap() {
     # shellcheck source=/dev/null
     source "${ETCDIR}/default/fail2ban-ssh"
 
-    export "${FAIL2BAN_SSH_MAXRETRY:-${TFW_FAIL2BAN_SSH_MAXRETRY}}"
-    export "${FAIL2BAN_SSH_BANTIME:-${TFW_FAIL2BAN_SSH_BANTIME}}"
+    : "${FAIL2BAN_SSH_MAXRETRY:=${TFW_FAIL2BAN_SSH_MAXRETRY}}"
+    : "${FAIL2BAN_SSH_BANTIME:=${TFW_FAIL2BAN_SSH_BANTIME}}"
   fi
 
   if [[ -f "${ETCDIR}/default/github-users" ]]; then
     # shellcheck source=/dev/null
     source "${ETCDIR}/default/github-users"
 
-    export "${GITHUB_USERS:-${TFW_GITHUB_USERS}}"
+    : "${GITHUB_USERS:=${TFW_GITHUB_USERS}}"
   fi
 
   local github_users
@@ -678,13 +678,13 @@ EOF
 }
 
 __ensure_server_ssh_keys() {
-  local ssh_keys="${@}"
+  local ssh_keys=("${@}")
 
   if [[ "${#ssh_keys[@]}" -eq 0 ]]; then
-    ssh_keys=( rsa:4096 ecdsa:521 ed25519:256 )
+    ssh_keys=(rsa:4096 ecdsa:521 ed25519:256)
   fi
 
-  for key in "${ssh_keys[@]}" ; do
+  for key in "${ssh_keys[@]}"; do
     local keytype="${key%%:*}"
     local keybits="${key##*:}"
     local keyfile="${ETCDIR}/ssh/ssh_host_${keytype}_key"
