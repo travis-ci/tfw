@@ -24,6 +24,7 @@ __TFW_DEPENDENCIES__=(
   'getent'
   'hostname'
   'jq'
+  'mdadm'
   'mkdir'
   'mktemp'
   'rm'
@@ -39,6 +40,7 @@ main() {
     eval "__run_${key}() { __run_${__TFW_ALIASES__[${key}]} \"\${@}\"; }"
   done
 
+  : "${DEVDIR:=/dev}"
   : "${ETCDIR:=/etc}"
   : "${RUNDIR:=/var/tmp/travis-run.d}"
   : "${TMPDIR:=/tmp}"
@@ -124,11 +126,12 @@ Junk drawer utility stuff:
 Administrivia:
 
   admin-bootstrap
-  admin-users
-  admin-travis-sudo
-  admin-ssh
   admin-hostname
+  admin-raid
   admin-rsyslog
+  admin-ssh
+  admin-travis-sudo
+  admin-users
 
 EOUSAGE
   exit "${exit_code}"
@@ -756,6 +759,38 @@ __run_admin-rsyslog() {
 
   systemctl stop rsyslog || true
   systemctl start rsyslog || true
+}
+
+def admin-raid "[device] [raid-level]
+
+Set up a multi-disk volume at [device] (default /dev/md0) with raid level
+[raid-level] (default 0) from all available disks, as determined by looking at
+all available /dev/sd* devices.
+"
+__run_admin-raid() {
+  local device="${1:-/dev/md0}"
+  local raid_level="${2:-0}"
+
+  if [[ -e "${device}" ]]; then
+    return
+  fi
+
+  local raid_devices=()
+  local devx="${DEVDIR}/sdx"
+  local max_devlen="${#devx}"
+
+  for d in "${DEVDIR}/sd"*; do
+    if [[ "${#d}" -gt "${max_devlen}" ]]; then
+      continue
+    fi
+    raid_devices=("${d}" "${raid_devices[@]}")
+  done
+
+  mdadm \
+    --create "${device}" \
+    --level="${raid_level}" \
+    --raid-devices="${#raid_devices[@]}" \
+    "${raid_devices[@]}"
 }
 
 main "${@}"
