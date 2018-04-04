@@ -15,13 +15,24 @@ __TFW_DEPENDENCIES__=(
   'awk'
   'bash'
   'cat'
+  'chmod'
+  'chown'
   'curl'
   'cut'
   'dirname'
   'docker'
+  'getent'
+  'hostname'
   'jq'
+  'mdadm'
+  'mkdir'
   'mktemp'
+  'rm'
+  'ssh-import-id'
+  'ssh-keygen'
+  'systemctl'
   'tee'
+  'useradd'
 )
 
 main() {
@@ -29,6 +40,7 @@ main() {
     eval "__run_${key}() { __run_${__TFW_ALIASES__[${key}]} \"\${@}\"; }"
   done
 
+  : "${DEVDIR:=/dev}"
   : "${ETCDIR:=/etc}"
   : "${RUNDIR:=/var/tmp/travis-run.d}"
   : "${TMPDIR:=/tmp}"
@@ -102,14 +114,24 @@ tfw <command> [${more-stuff(1)}, ${maybe(2)}]
 
 Docker image configuration and deployment stuff:
 
-  extract, e
-  printenv, p
-  writeenv, w
+  app-extract, extract, e
+  app-printenv, printenv, p
+  app-writeenv, writeenv, w
 
 Junk drawer utility stuff:
 
   urldecode, d
   gsub, g
+
+Administrivia:
+
+  admin-bootstrap
+  admin-hostname
+  admin-raid
+  admin-rsyslog
+  admin-ssh
+  admin-travis-sudo
+  admin-users
 
 EOUSAGE
   exit "${exit_code}"
@@ -207,14 +229,14 @@ __bootstrap_docker() {
   curl -sSL https://get.docker.io | bash
 }
 
-def printenv,p "<name> [outfile] [-E/--export]
+def app-printenv,printenv,p "<name> [outfile] [-E/--export]
 
 Print the combined configuration for a given thing by name, optionally writing
 to a second \${outfile} argument.  If -E/--export is given, then any leading
 \"export \" statements will not be stripped.
 
 NOTE: \${ETCDIR} is used as prefix for \${ETCDIR}/default/"
-__run_printenv() {
+__run_app-printenv() {
   local name="${1}"
   if [[ ! "${name}" ]]; then
     __error 'Missing positional argument for name'
@@ -256,21 +278,21 @@ __run_printenv() {
   done
 }
 
-def writeenv,w "<name> [dest-basename]
+def app-writeenv,writeenv,w "<name> [dest-basename]
 
 Write the combined configuration for a given thing by name to \${RUNDIR}/,
 defaulting to \${RUNDIR}/\${name}.env, but optionally to a custom dest basename.
 
 NOTE: \${ETCDIR} is used as prefix for \${ETCDIR}/default/\
 NOTE: \${RUNDIR} is used as prefix for \${RUNDIR}/\${name}.env"
-__run_writeenv() {
+__run_app-writeenv() {
   local dest_basename="${2:-${1}}"
   local dest="${RUNDIR:-/var/tmp/travis-run.d}/${dest_basename}.env"
   mkdir -p "$(dirname "${dest}")"
-  __run_printenv "${1}" "${dest}"
+  __run_app-printenv "${1}" "${dest}"
 }
 
-def extract,e "<name> <image>
+def app-extract,extract,e "<name> <image>
 
 Extract systemd service definition and wrapper script, if present, from a given
 docker \${image} to system destinations, defaults being:
@@ -280,7 +302,7 @@ wrapper script:     \${USRSBINDIR:-/usr/sbin}/\${name}-wrapper
 
 NOTE: \${ETCDIR} is used as prefix for \${ETCDIR}/systemd/system\${name}.service
 NOTE: \${USRSBINDIR} is used as prefix for \${USRSBINDIR}/\${name}-wrapper"
-__run_extract() {
+__run_app-extract() {
   local name="${1}"
   local image="${2}"
 
@@ -496,6 +518,279 @@ __fetch_instance_metadata_packet() {
     .address" <"${RUNDIR}/metadata.json" >"${RUNDIR}/instance-ipv4"
   jq -r .facility <"${RUNDIR}/metadata.json" >"${RUNDIR}/instance-region-zone"
   return 0
+}
+
+def admin-bootstrap "
+
+Run all admin-* tasks, attempting to fetch configuration from \${ETCDIR}/default
+files in the following order, with relevant variables:
+
+\${ETCDIR}/default/tfw
+  + TFW_FAIL2BAN_SSH_BANTIME - int for fail2ban ssh jail ban time
+  + TFW_FAIL2BAN_SSH_MAXRETRY - int for fail2ban ssh jail ban retries
+  + TFW_GITHUB_USERS - \" \"-delimited username:github-login pairs
+  + TFW_SSH_KEYALGO_BITS  - \" \"-delimited algo:nbits pairs for ssh keygen
+
+\${ETCDIR}/default/fail2ban-ssh
+  + FAIL2BAN_SSH_BANTIME (falls back to TFW_FAIL2BAN_SSH_BANTIME)
+  + FAIL2BAN_SSH_MAXRETRY (falls back to TFW_FAIL2BAN_SSH_MAXRETRY)
+
+\${ETCDIR}/default/github-users
+  + GITHUB_USERS (falls back to TFW_GITHUB_USERS)
+"
+__run_admin-bootstrap() {
+  if [[ -f "${ETCDIR}/default/tfw" ]]; then
+    # shellcheck source=/dev/null
+    source "${ETCDIR}/default/tfw"
+  fi
+
+  if [[ -f "${ETCDIR}/default/fail2ban-ssh" ]]; then
+    # shellcheck source=/dev/null
+    source "${ETCDIR}/default/fail2ban-ssh"
+
+    : "${FAIL2BAN_SSH_MAXRETRY:=${TFW_FAIL2BAN_SSH_MAXRETRY}}"
+    : "${FAIL2BAN_SSH_BANTIME:=${TFW_FAIL2BAN_SSH_BANTIME}}"
+  fi
+
+  if [[ -f "${ETCDIR}/default/github-users" ]]; then
+    # shellcheck source=/dev/null
+    source "${ETCDIR}/default/github-users"
+
+    : "${GITHUB_USERS:=${TFW_GITHUB_USERS}}"
+  fi
+
+  local github_users
+  read -r -a github_users <<<"${GITHUB_USERS}"
+  __run_admin-users "${github_users[@]}"
+
+  __run_admin-travis-sudo
+
+  local ssh_keyalgo_bits
+  read -r -a ssh_keyalgo_bits <<<"${TFW_SSH_KEYALGO_BITS}"
+  __run_admin-ssh \
+    "${FAIL2BAN_SSH_MAXRETRY}" "${FAIL2BAN_SSH_BANTIME}" \
+    "${ssh_keyalgo_bits[@]}"
+
+  __run_admin-hostname "${TFW_HOSTNAME_TEMPLATE}"
+  __run_admin-rsyslog "${TFW_SYSLOG_ADDRESS}"
+}
+
+def admin-users "<username:github-login> [username:github-login, ]
+
+Ensure local users exist with SSH authorized keys added from GitHub.
+"
+__run_admin-users() {
+  local username github_username
+
+  for pair in "${@}"; do
+    username="${pair%%:*}"
+    github_username="${pair##*:}"
+
+    if [[ ! "${username}" ]]; then
+      continue
+    fi
+
+    __create_user "${username}"
+    __stub_zshrc "${username}"
+
+    if [[ ! "${github_username}" ]]; then
+      continue
+      __add_github_keys "${username}" "${github_username}"
+    fi
+  done
+}
+
+__create_user() {
+  local username="${1}"
+
+  if getent passwd "${username}"; then
+    return
+  fi
+
+  useradd \
+    -G sudo \
+    -U \
+    -d "/home/${username}" \
+    -m \
+    -s /bin/zsh \
+    "${username}"
+}
+
+__stub_zshrc() {
+  local username="${1}"
+  local zshrc="/home/${username}/.zshrc"
+
+  if [[ -s "${zshrc}" ]]; then
+    return
+  fi
+
+  echo '# this space intentionally left blank' >"${zshrc}"
+  chmod 0640 "${zshrc}"
+  chown "${username}:${username}" "${zshrc}"
+}
+
+__add_github_keys() {
+  local username="${1}"
+  local github_username="${2}"
+  local ssh_dir="/home/${username}/.ssh"
+
+  mkdir -p "${ssh_dir}"
+  chmod 0700 "${ssh_dir}"
+
+  URL=https://github.com/%s.keys \
+    ssh-import-id -o "${ssh_dir}/authorized_keys" "${github_username}"
+  chown -R "${username}:${username}" "${ssh_dir}"
+}
+
+def admin-travis-sudo "
+
+Disable sudo access for travis user if it exists.
+"
+__run_admin-travis-sudo() {
+  rm -vf "${ETCDIR}/sudoers.d/travis"
+}
+
+def admin-ssh "[ssh-maxretry] [ssh-bantime] [keyalgo:bits, keyalgo:bits, ...]
+
+Enable and configure SSH server keys and fail2ban SSH jail.
+"
+__run_admin-ssh() {
+  local ssh_maxretry="${1}"
+  shift || true
+  local ssh_bantime="${2}"
+  shift || true
+  __enable_fail2ban_ssh_jail "${ssh_maxretry}" "${ssh_bantime}"
+  __ensure_server_ssh_keys "${@}"
+}
+
+__enable_fail2ban_ssh_jail() {
+  local ssh_maxretry="${1:-4}"
+  local ssh_bantime="${2:-86400}"
+  local confdir="${ETCDIR}/fail2ban"
+
+  cat >"${confdir}/jail.d/99-enable-ssh.local" <<EOF
+# Written via tfw :heart:
+[ssh]
+enabled = true
+maxretry = ${ssh_maxretry}
+bantime = ${ssh_bantime}
+EOF
+
+  systemctl stop fail2ban || true
+  systemctl start fail2ban || true
+}
+
+__ensure_server_ssh_keys() {
+  local ssh_keys=("${@}")
+
+  if [[ "${#ssh_keys[@]}" -eq 0 ]]; then
+    ssh_keys=(rsa:4096 ecdsa:521 ed25519:256)
+  fi
+
+  for key in "${ssh_keys[@]}"; do
+    local keytype="${key%%:*}"
+    local keybits="${key##*:}"
+    local keyfile="${ETCDIR}/ssh/ssh_host_${keytype}_key"
+
+    if [ -f "${keyfile}" ]; then
+      __info "'${keytype}' key (${keyfile}) already exists; not regenerating."
+      continue
+    fi
+
+    __info "generating '${keytype}' key (${keyfile}); this may take some time..."
+    ssh-keygen -q -f "${keyfile}" -N '' -t "${keytype}" -b "${keybits}"
+    ssh-keygen -l -f "${keyfile}.pub"
+  done
+}
+
+def admin-hostname "[hostname-template]
+
+Set system hostname and add /etc/hosts record based on runtime values and
+optional {hostname-template} (default=\${RUNDIR}/instance-hostname.tmpl).
+"
+__run_admin-hostname() {
+  local hostname_template="${1:-${RUNDIR}/instance-hostname.tmpl}"
+  local hosts_line
+  local instance_hostname
+  instance_hostname="$(__run_gsub 'instance-hostname' "${hostname_template}")"
+
+  if [[ ! "${instance_hostname}" ]]; then
+    __warn 'No instance hostname generated'
+  fi
+
+  hosts_line="$(__get_instance_ipv4)"
+  if [[ "${hosts_line}" ]]; then
+    hosts_line="${hosts_line} ${instance_hostname} ${instance_hostname%%.*}"
+  fi
+
+  echo "${instance_hostname}" >"${ETCDIR}/hostname"
+  echo "${instance_hostname}" >"${RUNDIR}/instance-hostname"
+
+  hostname -F "${ETCDIR}/hostname"
+
+  if ! grep -q "^${hosts_line}" "${ETCDIR}/hosts"; then
+    echo "${hosts_line}" >>"${ETCDIR}/hosts"
+  fi
+}
+
+def admin-rsyslog "[syslog-address]
+
+Ensure rsyslog forwarding is enabled if a [syslog-address] is available, reading
+from \${RUNDIR}/syslog-address by default.
+"
+__run_admin-rsyslog() {
+  local syslog_address="${1}"
+  local rsyslog_papertrail_conf="${ETCDIR}/rsyslog.d/65-papertrail.conf"
+  local syslog_address_file="${RUNDIR}/syslog-address"
+
+  if [[ ! "${syslog_address}" ]]; then
+    syslog_address="$(cat "${syslog_address_file}" 2>/dev/null)"
+  fi
+
+  if [[ ! "${syslog_address}" ]]; then
+    __error "Missing \${syslog_address}"
+    __run_help admin-rsyslog 2
+  fi
+
+  mkdir -p "$(dirname "${rsyslog_papertrail_conf}")"
+  touch "${rsyslog_papertrail_conf}"
+  sed -i '/^\*\.\*.*@/d' "${rsyslog_papertrail_conf}"
+  echo "*.* @${syslog_address}" >>"${rsyslog_papertrail_conf}"
+
+  systemctl stop rsyslog || true
+  systemctl start rsyslog || true
+}
+
+def admin-raid "[device] [raid-level]
+
+Set up a multi-disk volume at [device] (default /dev/md0) with raid level
+[raid-level] (default 0) from all available disks, as determined by looking at
+all available /dev/sd* devices.
+"
+__run_admin-raid() {
+  local device="${1:-/dev/md0}"
+  local raid_level="${2:-0}"
+
+  if [[ -e "${device}" ]]; then
+    return
+  fi
+
+  local raid_devices=()
+  local devx="${DEVDIR}/sdx"
+  local max_devlen="${#devx}"
+
+  for d in "${DEVDIR}/sd"*; do
+    if [[ "${#d}" -gt "${max_devlen}" ]]; then
+      continue
+    fi
+    raid_devices=("${d}" "${raid_devices[@]}")
+  done
+
+  mdadm \
+    --create "${device}" \
+    --level="${raid_level}" \
+    --raid-devices="${#raid_devices[@]}" \
+    "${raid_devices[@]}"
 }
 
 main "${@}"
