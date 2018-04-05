@@ -779,10 +779,11 @@ __run_admin-raid() {
     return
   fi
 
-  lsblk --json >"${TMPDIR}/lsblk.json"
   raid_devices_string="$(
-    jq -r '.blockdevices|.[]|select(.children==null)|["/dev",.name]|join("/")' \
-      <"${TMPDIR}/lsblk.json" | tr '\n' ' '
+    lsblk --json |
+      jq -r '.blockdevices|.[]|
+             select(.children==null)|["/dev",.name]|join("/")' |
+      tr '\n' ' '
   )"
   read -r -a raid_devices <<<"${raid_devices_string}"
 
