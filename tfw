@@ -24,6 +24,7 @@ __TFW_DEPENDENCIES__=(
   'getent'
   'hostname'
   'jq'
+  'lsblk'
   'mdadm'
   'mkdir'
   'mktemp'
@@ -32,6 +33,7 @@ __TFW_DEPENDENCIES__=(
   'ssh-keygen'
   'systemctl'
   'tee'
+  'tr'
   'useradd'
 )
 
@@ -770,21 +772,20 @@ all available /dev/sd* devices.
 __run_admin-raid() {
   local device="${1:-/dev/md0}"
   local raid_level="${2:-0}"
+  local raid_devices_string
+  local raid_devices=()
 
   if [[ -e "${device}" ]]; then
     return
   fi
 
-  local raid_devices=()
-  local devx="${DEVDIR}/sdx"
-  local max_devlen="${#devx}"
-
-  for d in "${DEVDIR}/sd"*; do
-    if [[ "${#d}" -gt "${max_devlen}" ]]; then
-      continue
-    fi
-    raid_devices=("${d}" "${raid_devices[@]}")
-  done
+  raid_devices_string="$(
+    lsblk --json |
+      jq -r '.blockdevices|.[]|
+             select(.children==null)|["/dev",.name]|join("/")' |
+      tr '\n' ' '
+  )"
+  read -r -a raid_devices <<<"${raid_devices_string}"
 
   mdadm \
     --create "${device}" \
