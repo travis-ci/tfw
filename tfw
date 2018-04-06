@@ -50,6 +50,7 @@ main() {
   : "${USRSBINDIR:=/usr/sbin}"
   : "${VARCACHEDIR:=/var/cache}"
   : "${VARLIBDIR:=/var/lib}"
+  : "${VARTMPDIR:=/var/tmp}"
 
   local command="${1}"
   shift || true
@@ -128,6 +129,7 @@ Junk drawer utility stuff:
 Administrivia:
 
   admin-bootstrap
+  admin-duo
   admin-hostname
   admin-raid
   admin-rsyslog
@@ -528,6 +530,7 @@ Run all admin-* tasks, attempting to fetch configuration from \${ETCDIR}/default
 files in the following order, with relevant variables:
 
 \${ETCDIR}/default/tfw
+  + TFW_DUO_CONF - path to a duo config file
   + TFW_FAIL2BAN_SSH_BANTIME - int for fail2ban ssh jail ban time
   + TFW_FAIL2BAN_SSH_MAXRETRY - int for fail2ban ssh jail ban retries
   + TFW_GITHUB_USERS - \" \"-delimited username:github-login pairs
@@ -575,6 +578,7 @@ __run_admin-bootstrap() {
 
   __run_admin-hostname "${TFW_HOSTNAME_TEMPLATE}"
   __run_admin-rsyslog "${TFW_SYSLOG_ADDRESS}"
+  __run_admin-duo "${TFW_DUO_CONF}"
 }
 
 def admin-users "<username:github-login> [username:github-login, ]
@@ -792,6 +796,74 @@ __run_admin-raid() {
     --level="${raid_level}" \
     --raid-devices="${#raid_devices[@]}" \
     "${raid_devices[@]}"
+}
+
+def admin-duo "[duo-conf]
+
+If a configuration file is present at [duo-conf] (default /var/tmp/duo.conf),
+install duo-unix package and configure pam and sshd bits accordingly.  Any users
+that are members of the 'sudo' group will also be added to the 'duo' group.
+"
+__run_admin-duo() {
+  local duo_conf="${1:-${VARTMPDIR}/duo.conf}"
+
+  if [[ ! -f "${duo_conf}" ]]; then
+    logger 'No duo conf found; skipping duo setup'
+    return
+  fi
+
+  local pam_d="${ETCDIR}/pam.d"
+  local conf_base_url
+  conf_base_url='https://raw.githubusercontent.com/travis-ci'
+  conf_base_url="${conf_base_url}/travis-cookbooks/master/cookbooks"
+  conf_base_url="${conf_base_url}/travis_duo/templates/default"
+  local dist
+  dist="$(lsb_release -sc)"
+
+  apt-get install -yqq libssl-dev libpam-dev
+  apt-add-repository -y "deb http://pkg.duosecurity.com/Ubuntu ${dist} main"
+  curl -sSL https://duo.com/APT-GPG-KEY-DUO | apt-key add -
+  apt-get update -yqq
+  apt-get install -y duo-unix
+
+  for conf in sshd common-auth; do
+    curl -sSL -o "${pam_d}/${conf}" \
+      "${conf_base_url}/pam.d-${conf}.conf.erb"
+    chmod 0600 "${pam_d}/${conf}"
+  done
+
+  chown -R sshd:root "${pam_d}"
+
+  local duo_conf_dest
+
+  for conf in pam login; do
+    duo_conf_dest="${ETCDIR}/duo/${conf}_duo.conf"
+    cp -v "${duo_conf}" "${duo_conf_dest}"
+    chown root:root "${duo_conf_dest}"
+    chmod 0600 "${duo_conf_dest}"
+  done
+
+  chown -R sshd:root "${ETCDIR}/duo"
+
+  mkdir -p /lib/security
+  ln -svf /lib64/security/pam_duo.so /lib/security/pam_duo.so
+
+  local sudo_users_string
+  sudo_users_string="$(getent group sudo | awk -F: '{ print $NF }')"
+  local sudo_users=()
+  IFS=, read -r -a sudo_users <<<"${sudo_users_string}"
+
+  if ! getent group duo &>/dev/null; then
+    groupadd duo
+  fi
+
+  for u in "${sudo_users[@]}"; do
+    if [[ "${u}" == terraform ]]; then
+      continue
+    fi
+
+    usermod -a -G duo "${u}"
+  done
 }
 
 main "${@}"
