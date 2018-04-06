@@ -530,6 +530,7 @@ Run all admin-* tasks, attempting to fetch configuration from \${ETCDIR}/default
 files in the following order, with relevant variables:
 
 \${ETCDIR}/default/tfw
+  + TFW_DUO_CONF - path to a duo config file
   + TFW_FAIL2BAN_SSH_BANTIME - int for fail2ban ssh jail ban time
   + TFW_FAIL2BAN_SSH_MAXRETRY - int for fail2ban ssh jail ban retries
   + TFW_GITHUB_USERS - \" \"-delimited username:github-login pairs
@@ -577,7 +578,7 @@ __run_admin-bootstrap() {
 
   __run_admin-hostname "${TFW_HOSTNAME_TEMPLATE}"
   __run_admin-rsyslog "${TFW_SYSLOG_ADDRESS}"
-  __run_admin-duo
+  __run_admin-duo "${TFW_DUO_CONF}"
 }
 
 def admin-users "<username:github-login> [username:github-login, ]
@@ -799,12 +800,12 @@ __run_admin-raid() {
 
 def admin-duo "[duo-conf]
 
-If a configuration file is present at [duo-conf] (default /var/tmp/duo.conf,
+If a configuration file is present at [duo-conf] (default /var/tmp/duo.conf),
 install duo-unix package and configure pam and sshd bits accordingly.  Any users
 that are members of the 'sudo' group will also be added to the 'duo' group.
 "
 __run_admin-duo() {
-  local duo_conf="${VARTMPDIR}/duo.conf"
+  local duo_conf="${1:-${VARTMPDIR}/duo.conf}"
 
   if [[ ! -f "${duo_conf}" ]]; then
     logger 'No duo conf found; skipping duo setup'
