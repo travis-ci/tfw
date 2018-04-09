@@ -79,14 +79,17 @@ def() {
 
 __error() {
   echo "tfw:ERROR: ${*}" >&2
+  logger -p user.error "${*}"
 }
 
 __warn() {
   echo "tfw:WARN: ${*}" >&2
+  logger -p user.warn "${*}"
 }
 
 __info() {
   echo "tfw:INFO: ${*}" >&2
+  logger "${*}"
 }
 
 def help,h,-h,--help "[topic] [exit-code]
@@ -343,12 +346,12 @@ __run_app-extract() {
     dest="$(__run_gsub "${name}" "${wrapper_dest_tmp}" "${wrapper_dest}")"
     if [[ -w "${dest}" ]]; then
       chmod +x "${dest}"
-      __info "Extracted ${dest}"
+      __info extracted dest="${dest}"
     else
-      __error "Failed to extract ${wrapper_dest}"
+      __error failed to extract dest="${wrapper_dest}"
     fi
   else
-    __warn "No systemd wrapper executable found for ${name}"
+    __warn no systemd wrapper executable found service="${name}"
   fi
 }
 
@@ -592,6 +595,9 @@ __run_admin-users() {
     username="${pair%%:*}"
     github_username="${pair##*:}"
 
+    __info adding command=admin-users username="${username}" \
+      github_username="${github_username}"
+
     if [[ ! "${username}" ]]; then
       continue
     fi
@@ -599,8 +605,7 @@ __run_admin-users() {
     __create_user "${username}"
     __stub_zshrc "${username}"
 
-    if [[ ! "${github_username}" ]]; then
-      continue
+    if [[ "${github_username}" ]]; then
       __add_github_keys "${username}" "${github_username}"
     fi
   done
@@ -609,7 +614,7 @@ __run_admin-users() {
 __create_user() {
   local username="${1}"
 
-  if getent passwd "${username}"; then
+  if getent passwd "${username}" &>/dev/null; then
     return
   fi
 
@@ -808,7 +813,7 @@ __run_admin-duo() {
   local duo_conf="${1:-${VARTMPDIR}/duo.conf}"
 
   if [[ ! -f "${duo_conf}" ]]; then
-    logger 'No duo conf found; skipping duo setup'
+    __warn 'No duo conf found; skipping duo setup'
     return
   fi
 
