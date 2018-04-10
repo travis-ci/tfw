@@ -12,6 +12,8 @@ declare -A __TFW_ALIASES__
 declare -A __TFW_HELP_DOC__
 
 __TFW_DEPENDENCIES__=(
+  'apt-get'
+  'apt-key'
   'awk'
   'bash'
   'cat'
@@ -24,6 +26,7 @@ __TFW_DEPENDENCIES__=(
   'getent'
   'hostname'
   'jq'
+  'lsb_release'
   'lsblk'
   'mdadm'
   'mkdir'
@@ -43,7 +46,9 @@ main() {
   done
 
   : "${DEVDIR:=/dev}"
+  : "${DIST:=$(lsb_release -sc)}"
   : "${ETCDIR:=/etc}"
+  : "${OPTDIR:=/opt}"
   : "${RUNDIR:=/var/tmp/travis-run.d}"
   : "${TMPDIR:=/tmp}"
   : "${USRBINDIR:=/usr/bin}"
@@ -134,6 +139,7 @@ Administrivia:
   admin-bootstrap
   admin-duo
   admin-hostname
+  admin-librato
   admin-raid
   admin-rsyslog
   admin-ssh
@@ -168,15 +174,20 @@ Ensure dependencies are present on the system; intended to be run early in
 instance preparation.
 
 NOTE: \${RUNDIR} is used as prefix for cached calculated values
-NOTE: \${TMPDIR} is used for temporary file bits
+NOTE: \${TMPDIR} and \${VARTMPDIR} are used for temporary bits
 NOTE: \${USRBINDIR} is used as prefix installed executables
 "
 __run_bootstrap() {
   mkdir -p "${RUNDIR}"
+  chmod 0755 "${RUNDIR}"
+  chown root:root "${TMPDIR}" "${VARTMPDIR}"
+  chmod 0777 "${TMPDIR}" "${VARTMPDIR}"
 
   __bootstrap_jq
   __bootstrap_apt
   __bootstrap_docker
+  __bootstrap_sudo
+  __bootstrap_instance_metadata
 
   for cmd in "${__TFW_DEPENDENCIES__[@]}"; do
     if ! command -v "${cmd}" &>/dev/null; then
@@ -220,12 +231,16 @@ __bootstrap_apt() {
     apt-transport-https \
     curl \
     debian-archive-keyring \
+    fail2ban \
     openssh-client \
     openssh-server \
+    pssh \
     rsyslog \
     rsyslog-gnutls \
     software-properties-common \
-    sudo
+    sudo \
+    whois \
+    zsh
 }
 
 __bootstrap_docker() {
@@ -234,6 +249,43 @@ __bootstrap_docker() {
   fi
 
   curl -sSL https://get.docker.io | bash
+}
+
+__bootstrap_sudo() {
+  local sudoers="${ETCDIR}/sudoers"
+  local sudoers_d="${ETCDIR}/sudoers.d"
+
+  cat >"${sudoers}" <<\EOSUDOERS
+Defaults !lecture,tty_tickets,!fqdn
+root ALL=(ALL) ALL
+#includedir /etc/sudoers.d
+EOSUDOERS
+  chown root:root "${sudoers}"
+  chmod 0440 "${sudoers}"
+
+  mkdir -p "${sudoers_d}"
+  chown root:root "${sudoers_d}"
+  chmod 0750 "${sudoers_d}"
+
+  cat >"${sudoers_d}/90-group-sudo" <<\EOGROUPSUDO
+%sudo ALL=(ALL) NOPASSWD:ALL
+EOGROUPSUDO
+  chown root:root "${sudoers_d}/90-group-sudo"
+  chmod 0440 "${sudoers_d}/90-group-sudo"
+}
+
+__bootstrap_instance_metadata() {
+  local inst_conf="${ETCDIR}/default/travis-instance-local"
+  if [[ -f "${inst_conf}" ]]; then
+    __info "found ${inst_conf}; skipping metadata setup"
+    return
+  fi
+
+  cat >"${inst_conf}" <<EOCONF
+# generated $(date -u)
+export TRAVIS_INSTANCE_ID=$(__get_instance_id)
+export TRAVIS_INSTANCE_IPV4=$(__get_instance_ipv4)
+EOCONF
 }
 
 def app-printenv,printenv,p "<name> [outfile] [-E/--export]
@@ -372,17 +424,17 @@ __run_gsub() {
   shift || true
 
   if [[ ! "${name}" ]]; then
-    __error 'Missing positional argument for name'
+    __error 'gsub missing positional argument for name'
     __run_help gsub 2
   fi
 
   if [[ ! "${infile}" ]]; then
-    __error 'Missing positional argument for input file'
+    __error 'gsub missing positional argument for input file'
     __run_help gsub 2
   fi
 
   if [[ ! -r "${infile}" ]]; then
-    __error 'Input file is not readable'
+    __error "gsub input not readable path='${infile}'"
     __run_help gsub 2
   fi
 
@@ -582,6 +634,7 @@ __run_admin-bootstrap() {
   __run_admin-hostname "${TFW_HOSTNAME_TEMPLATE}"
   __run_admin-rsyslog "${TFW_SYSLOG_ADDRESS}"
   __run_admin-duo "${TFW_DUO_CONF}"
+  __run_admin-librato
 }
 
 def admin-users "<username:github-login> [username:github-login, ]
@@ -822,11 +875,9 @@ __run_admin-duo() {
   conf_base_url='https://raw.githubusercontent.com/travis-ci'
   conf_base_url="${conf_base_url}/travis-cookbooks/master/cookbooks"
   conf_base_url="${conf_base_url}/travis_duo/templates/default"
-  local dist
-  dist="$(lsb_release -sc)"
 
-  apt-get install -yqq libssl-dev libpam-dev
-  apt-add-repository -y "deb http://pkg.duosecurity.com/Ubuntu ${dist} main"
+  apt-get install -yqq libssl-dev libpam-dev libpam-cap
+  apt-add-repository -y "deb http://pkg.duosecurity.com/Ubuntu ${DIST} main"
   curl -sSL https://duo.com/APT-GPG-KEY-DUO | apt-key add -
   apt-get update -yqq
   apt-get install -y duo-unix
@@ -869,6 +920,54 @@ __run_admin-duo() {
 
     usermod -a -G duo "${u}"
   done
+}
+
+def admin-librato "
+
+If both \${LIBRATO_EMAIL} and \${LIBRATO_TOKEN} are defined, either in the
+current env or after evaluating 'app-printenv librato', ensure the librato
+collectd APT source is available, install collectd, and configure accordingly.
+"
+__run_admin-librato() {
+  eval "$(__run_app-printenv librato)"
+
+  : "${HOSTNAME:=$(cat "${ETCDIR}/hostname")}"
+
+  if [[ ! "${LIBRATO_EMAIL}" || ! "${LIBRATO_TOKEN}" ]]; then
+    __warn 'no librato creds found; skipping librato installation'
+    return
+  fi
+
+  cat >"${ETCDIR}/apt/sources.list.d/librato_librato-collectd.list" <<EOF
+deb https://packagecloud.io/librato/librato-collectd/ubuntu/ ${DIST} main
+EOF
+
+  curl -s https://packagecloud.io/gpg.key 2>/dev/null | apt-key add -
+
+  cat >"${ETCDIR}/apt/preferences.d/librato-collectd" <<EOF
+Package: collectd collectd-core
+Pin: release l=librato-collectd
+Pin-Priority: 1001
+EOF
+
+  apt-get update -yqq
+  apt-get install -yqq collectd
+
+  cat >"${OPTDIR}/collectd/etc/collectd.conf.d/librato.conf" <<EOF
+LoadPlugin write_http
+Hostname "${HOSTNAME}"
+<Plugin write_http>
+  <Node "librato">
+    URL "https://collectd.librato.com/v1/measurements"
+    Format "JSON"
+    BufferSize 8192
+    User "${LIBRATO_EMAIL}"
+    Password "${LIBRATO_TOKEN}"
+  </Node>
+</Plugin>
+EOF
+
+  systemctl restart collectd || true
 }
 
 main "${@}"
