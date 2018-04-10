@@ -12,6 +12,8 @@ declare -A __TFW_ALIASES__
 declare -A __TFW_HELP_DOC__
 
 __TFW_DEPENDENCIES__=(
+  'apt-get'
+  'apt-key'
   'awk'
   'bash'
   'cat'
@@ -24,6 +26,7 @@ __TFW_DEPENDENCIES__=(
   'getent'
   'hostname'
   'jq'
+  'lsb_release'
   'lsblk'
   'mdadm'
   'mkdir'
@@ -43,7 +46,9 @@ main() {
   done
 
   : "${DEVDIR:=/dev}"
+  : "${DIST:=$(lsb_release -sc)}"
   : "${ETCDIR:=/etc}"
+  : "${OPTDIR:=/opt}"
   : "${RUNDIR:=/var/tmp/travis-run.d}"
   : "${TMPDIR:=/tmp}"
   : "${USRBINDIR:=/usr/bin}"
@@ -134,6 +139,7 @@ Administrivia:
   admin-bootstrap
   admin-duo
   admin-hostname
+  admin-librato
   admin-raid
   admin-rsyslog
   admin-ssh
@@ -168,15 +174,20 @@ Ensure dependencies are present on the system; intended to be run early in
 instance preparation.
 
 NOTE: \${RUNDIR} is used as prefix for cached calculated values
-NOTE: \${TMPDIR} is used for temporary file bits
+NOTE: \${TMPDIR} and \${VARTMPDIR} are used for temporary bits
 NOTE: \${USRBINDIR} is used as prefix installed executables
 "
 __run_bootstrap() {
   mkdir -p "${RUNDIR}"
+  chmod 0755 "${RUNDIR}"
+  chown root:root "${TMPDIR}" "${VARTMPDIR}"
+  chmod 0777 "${TMPDIR}" "${VARTMPDIR}"
 
   __bootstrap_jq
   __bootstrap_apt
   __bootstrap_docker
+  __bootstrap_sudo
+  __bootstrap_instance_metadata
 
   for cmd in "${__TFW_DEPENDENCIES__[@]}"; do
     if ! command -v "${cmd}" &>/dev/null; then
@@ -207,6 +218,11 @@ __bootstrap_apt() {
   systemctl disable apt-daily-upgrade || true
   systemctl stop apt-daily-upgrade || true
 
+  cat >"${ETCDIR}/apt/apt.conf.d/10recommends" <<\EOCONF
+APT::Install-Recommends "0";
+APT::Install-Suggests "0";
+EOCONF
+
   apt-get update -yqq
   touch "${VARLIBDIR}/apt/periodic/update-success-stamp"
 
@@ -218,14 +234,19 @@ __bootstrap_apt() {
 
   apt-get install -yqq \
     apt-transport-https \
+    bzip2 \
     curl \
     debian-archive-keyring \
+    fail2ban \
     openssh-client \
     openssh-server \
+    pssh \
     rsyslog \
     rsyslog-gnutls \
     software-properties-common \
-    sudo
+    sudo \
+    whois \
+    zsh
 }
 
 __bootstrap_docker() {
@@ -234,6 +255,43 @@ __bootstrap_docker() {
   fi
 
   curl -sSL https://get.docker.io | bash
+}
+
+__bootstrap_sudo() {
+  local sudoers="${ETCDIR}/sudoers"
+  local sudoers_d="${ETCDIR}/sudoers.d"
+
+  cat >"${sudoers}" <<\EOSUDOERS
+Defaults !lecture,tty_tickets,!fqdn
+root ALL=(ALL) ALL
+#includedir /etc/sudoers.d
+EOSUDOERS
+  chown root:root "${sudoers}"
+  chmod 0440 "${sudoers}"
+
+  mkdir -p "${sudoers_d}"
+  chown root:root "${sudoers_d}"
+  chmod 0750 "${sudoers_d}"
+
+  cat >"${sudoers_d}/90-group-sudo" <<\EOGROUPSUDO
+%sudo ALL=(ALL) NOPASSWD:ALL
+EOGROUPSUDO
+  chown root:root "${sudoers_d}/90-group-sudo"
+  chmod 0440 "${sudoers_d}/90-group-sudo"
+}
+
+__bootstrap_instance_metadata() {
+  local inst_conf="${ETCDIR}/default/travis-instance-local"
+  if [[ -f "${inst_conf}" ]]; then
+    __info "found ${inst_conf}; skipping metadata setup"
+    return
+  fi
+
+  cat >"${inst_conf}" <<EOCONF
+# generated $(date -u)
+export TRAVIS_INSTANCE_ID=$(__get_instance_id)
+export TRAVIS_INSTANCE_IPV4=$(__get_instance_ipv4)
+EOCONF
 }
 
 def app-printenv,printenv,p "<name> [outfile] [-E/--export]
@@ -372,17 +430,17 @@ __run_gsub() {
   shift || true
 
   if [[ ! "${name}" ]]; then
-    __error 'Missing positional argument for name'
+    __error 'gsub missing positional argument for name'
     __run_help gsub 2
   fi
 
   if [[ ! "${infile}" ]]; then
-    __error 'Missing positional argument for input file'
+    __error 'gsub missing positional argument for input file'
     __run_help gsub 2
   fi
 
   if [[ ! -r "${infile}" ]]; then
-    __error 'Input file is not readable'
+    __error "gsub input not readable path='${infile}'"
     __run_help gsub 2
   fi
 
@@ -582,6 +640,7 @@ __run_admin-bootstrap() {
   __run_admin-hostname "${TFW_HOSTNAME_TEMPLATE}"
   __run_admin-rsyslog "${TFW_SYSLOG_ADDRESS}"
   __run_admin-duo "${TFW_DUO_CONF}"
+  __run_admin-librato
 }
 
 def admin-users "<username:github-login> [username:github-login, ]
@@ -670,8 +729,12 @@ __run_admin-ssh() {
   shift || true
   local ssh_bantime="${2}"
   shift || true
+
   __enable_fail2ban_ssh_jail "${ssh_maxretry}" "${ssh_bantime}"
   __ensure_server_ssh_keys "${@}"
+  __write_ssh_configs "${@}"
+
+  systemctl restart sshd || true
 }
 
 __enable_fail2ban_ssh_jail() {
@@ -679,6 +742,7 @@ __enable_fail2ban_ssh_jail() {
   local ssh_bantime="${2:-86400}"
   local confdir="${ETCDIR}/fail2ban"
 
+  mkdir -p "${confdir}"
   cat >"${confdir}/jail.d/99-enable-ssh.local" <<EOF
 # Written via tfw :heart:
 [ssh]
@@ -712,6 +776,61 @@ __ensure_server_ssh_keys() {
     ssh-keygen -q -f "${keyfile}" -N '' -t "${keytype}" -b "${keybits}"
     ssh-keygen -l -f "${keyfile}.pub"
   done
+}
+
+__write_ssh_configs() {
+  local ssh_keys=("${@}")
+
+  if [[ "${#ssh_keys[@]}" -eq 0 ]]; then
+    ssh_keys=(rsa:4096 ecdsa:521 ed25519:256)
+  fi
+
+  cat >"${ETCDIR}/ssh/ssh_config" <<\EOCONF
+Host 10.*
+  StrictHostKeyChecking no
+  UserKnownHostsFile /dev/null
+
+Host 192.168.*
+  StrictHostKeyChecking no
+  UserKnownHostsFile /dev/null
+EOCONF
+
+  cat >"${ETCDIR}/ssh/sshd_config" <<\EOCONF
+# vim:filetype=sshdconfig
+ChallengeResponseAuthentication no
+Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr
+KexAlgorithms curve25519-sha256@libssh.org,diffie-hellman-group-exchange-sha256
+ListenAddress 0.0.0.0:22
+ListenAddress [::]:22
+MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-ripemd160-etm@openssh.com,umac-128-etm@openssh.com,hmac-sha2-512,hmac-sha2-256,hmac-ripemd160,umac-128@openssh.com
+PasswordAuthentication no
+PermitRootLogin no
+PermitTunnel no
+PrintLastLog no
+PrintMOTD no
+Protocol 2
+PubkeyAuthentication yes
+UsePam yes
+EOCONF
+
+  for key in "${ssh_keys[@]}"; do
+    local keytype="${key%%:*}"
+    local keyfile="${ETCDIR}/ssh/ssh_host_${keytype}_key"
+    echo "HostKey ${keyfile}" >>"${ETCDIR}/ssh/sshd_config"
+  done
+
+  cat >>"${ETCDIR}/ssh/sshd_config" <<\EOCONF
+Match Host *
+  PasswordAuthentication no
+  PubkeyAuthentication yes
+
+Match Group duo
+  AllowTcpForwarding no
+  X11Forwarding no
+  ForceCommand /usr/sbin/login_duo
+EOCONF
+
+  chown -R sshd:root "${ETCDIR}/ssh"
 }
 
 def admin-hostname "[hostname-template]
@@ -753,6 +872,8 @@ __run_admin-rsyslog() {
   local syslog_address="${1}"
   local rsyslog_papertrail_conf="${ETCDIR}/rsyslog.d/65-papertrail.conf"
   local syslog_address_file="${RUNDIR}/syslog-address"
+  local papertrail_ca="${ETCDIR}/papertrail-bundle.pem"
+  local papertrail_ca_url='https://papertrailapp.com/tools/papertrail-bundle.pem'
 
   if [[ ! "${syslog_address}" ]]; then
     syslog_address="$(cat "${syslog_address_file}" 2>/dev/null)"
@@ -763,10 +884,50 @@ __run_admin-rsyslog() {
     __run_help admin-rsyslog 2
   fi
 
+  curl -sSL -o "${papertrail_ca}" "${papertrail_ca_url}"
+  chmod 0444 "${papertrail_ca}"
+
   mkdir -p "$(dirname "${rsyslog_papertrail_conf}")"
-  touch "${rsyslog_papertrail_conf}"
-  sed -i '/^\*\.\*.*@/d' "${rsyslog_papertrail_conf}"
-  echo "*.* @${syslog_address}" >>"${rsyslog_papertrail_conf}"
+
+  cat >"${ETCDIR}/rsyslog.d/50-default.conf" <<\EOCONF
+auth,authpriv.* -/var/log/auth.log
+*.*;auth,authpriv.none -/var/log/syslog
+daemon.* -/var/log/daemon.log
+kern.* -/var/log/kern.log
+mail.* -/var/log/mail.log
+user.* -/var/log/user.log
+mail.info -/var/log/mail.info
+mail.warn -/var/log/mail.warn
+mail.err -/var/log/mail.err
+news.crit -/var/log/news/news.crit
+news.err -/var/log/news/news.err
+news.notice -/var/log/news/news.notice
+*.=debug;auth,authpriv.none;news.none;mail.none -/var/log/debug
+*.=info;*.=notice;*.=warn;auth,authpriv.none;cron,daemon.none;mail,news.none -/var/log/messages
+*.emerg :omusrmsg:*
+EOCONF
+
+  cat >"${rsyslog_papertrail_conf}" <<EOCONF
+\$DefaultNetstreamDriverCAFile ${ETCDIR}/papertrail-bundle.pem
+\$DefaultNetstreamDriver gtls
+\$ActionSendStreamDriverMode 1
+\$ActionSendStreamDriverAuthMode x509/name
+\$ActionSendStreamDriverPermittedPeer *.papertrailapp.com
+\$ActionResumeRetryCount -1
+\$ActionResumeInterval 10
+\$ActionQueueType LinkedList
+\$ActionQueueMaxDiskSpace 1G
+\$ActionQueueFileName papertrailqueue
+\$ActionQueueSize 100000
+\$ActionQueueDiscardMark 97500
+\$ActionQueueHighWaterMark 80000
+\$ActionQueueCheckpointInterval 100
+\$ActionQueueSaveOnShutdown on
+\$ActionQueueTimeoutEnqueue 10
+\$ActionQueueDiscardSeverity 0
+
+*.* @${syslog_address}
+EOCONF
 
   systemctl stop rsyslog || true
   systemctl start rsyslog || true
@@ -822,11 +983,9 @@ __run_admin-duo() {
   conf_base_url='https://raw.githubusercontent.com/travis-ci'
   conf_base_url="${conf_base_url}/travis-cookbooks/master/cookbooks"
   conf_base_url="${conf_base_url}/travis_duo/templates/default"
-  local dist
-  dist="$(lsb_release -sc)"
 
-  apt-get install -yqq libssl-dev libpam-dev
-  apt-add-repository -y "deb http://pkg.duosecurity.com/Ubuntu ${dist} main"
+  apt-get install -yqq libssl-dev libpam-dev libpam-cap
+  apt-add-repository -y "deb http://pkg.duosecurity.com/Ubuntu ${DIST} main"
   curl -sSL https://duo.com/APT-GPG-KEY-DUO | apt-key add -
   apt-get update -yqq
   apt-get install -y duo-unix
@@ -869,6 +1028,54 @@ __run_admin-duo() {
 
     usermod -a -G duo "${u}"
   done
+}
+
+def admin-librato "
+
+If both \${LIBRATO_EMAIL} and \${LIBRATO_TOKEN} are defined, either in the
+current env or after evaluating 'app-printenv librato', ensure the librato
+collectd APT source is available, install collectd, and configure accordingly.
+"
+__run_admin-librato() {
+  eval "$(__run_app-printenv librato)"
+
+  : "${HOSTNAME:=$(cat "${ETCDIR}/hostname")}"
+
+  if [[ ! "${LIBRATO_EMAIL}" || ! "${LIBRATO_TOKEN}" ]]; then
+    __warn 'no librato creds found; skipping librato installation'
+    return
+  fi
+
+  cat >"${ETCDIR}/apt/sources.list.d/librato_librato-collectd.list" <<EOF
+deb https://packagecloud.io/librato/librato-collectd/ubuntu/ ${DIST} main
+EOF
+
+  curl -s https://packagecloud.io/gpg.key 2>/dev/null | apt-key add -
+
+  cat >"${ETCDIR}/apt/preferences.d/librato-collectd" <<EOF
+Package: collectd collectd-core
+Pin: release l=librato-collectd
+Pin-Priority: 1001
+EOF
+
+  apt-get update -yqq
+  apt-get install -yqq collectd
+
+  cat >"${OPTDIR}/collectd/etc/collectd.conf.d/librato.conf" <<EOF
+LoadPlugin write_http
+Hostname "${HOSTNAME}"
+<Plugin write_http>
+  <Node "librato">
+    URL "https://collectd.librato.com/v1/measurements"
+    Format "JSON"
+    BufferSize 8192
+    User "${LIBRATO_EMAIL}"
+    Password "${LIBRATO_TOKEN}"
+  </Node>
+</Plugin>
+EOF
+
+  systemctl restart collectd || true
 }
 
 main "${@}"
