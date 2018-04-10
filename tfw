@@ -218,6 +218,11 @@ __bootstrap_apt() {
   systemctl disable apt-daily-upgrade || true
   systemctl stop apt-daily-upgrade || true
 
+  cat >"${ETCDIR}/apt/apt.conf.d/10recommends" <<\EOCONF
+APT::Install-Recommends "0";
+APT::Install-Suggests "0";
+EOCONF
+
   apt-get update -yqq
   touch "${VARLIBDIR}/apt/periodic/update-success-stamp"
 
@@ -229,6 +234,7 @@ __bootstrap_apt() {
 
   apt-get install -yqq \
     apt-transport-https \
+    bzip2 \
     curl \
     debian-archive-keyring \
     fail2ban \
@@ -723,8 +729,12 @@ __run_admin-ssh() {
   shift || true
   local ssh_bantime="${2}"
   shift || true
+
   __enable_fail2ban_ssh_jail "${ssh_maxretry}" "${ssh_bantime}"
   __ensure_server_ssh_keys "${@}"
+  __write_ssh_configs "${@}"
+
+  systemctl restart sshd || true
 }
 
 __enable_fail2ban_ssh_jail() {
@@ -732,6 +742,7 @@ __enable_fail2ban_ssh_jail() {
   local ssh_bantime="${2:-86400}"
   local confdir="${ETCDIR}/fail2ban"
 
+  mkdir -p "${confdir}"
   cat >"${confdir}/jail.d/99-enable-ssh.local" <<EOF
 # Written via tfw :heart:
 [ssh]
@@ -765,6 +776,61 @@ __ensure_server_ssh_keys() {
     ssh-keygen -q -f "${keyfile}" -N '' -t "${keytype}" -b "${keybits}"
     ssh-keygen -l -f "${keyfile}.pub"
   done
+}
+
+__write_ssh_configs() {
+  local ssh_keys=("${@}")
+
+  if [[ "${#ssh_keys[@]}" -eq 0 ]]; then
+    ssh_keys=(rsa:4096 ecdsa:521 ed25519:256)
+  fi
+
+  cat >"${ETCDIR}/ssh/ssh_config" <<\EOCONF
+Host 10.*
+  StrictHostKeyChecking no
+  UserKnownHostsFile /dev/null
+
+Host 192.168.*
+  StrictHostKeyChecking no
+  UserKnownHostsFile /dev/null
+EOCONF
+
+  cat >"${ETCDIR}/ssh/sshd_config" <<\EOCONF
+# vim:filetype=sshdconfig
+ChallengeResponseAuthentication no
+Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr
+KexAlgorithms curve25519-sha256@libssh.org,diffie-hellman-group-exchange-sha256
+ListenAddress 0.0.0.0:22
+ListenAddress [::]:22
+MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-ripemd160-etm@openssh.com,umac-128-etm@openssh.com,hmac-sha2-512,hmac-sha2-256,hmac-ripemd160,umac-128@openssh.com
+PasswordAuthentication no
+PermitRootLogin no
+PermitTunnel no
+PrintLastLog no
+PrintMOTD no
+Protocol 2
+PubkeyAuthentication yes
+UsePam yes
+EOCONF
+
+  for key in "${ssh_keys[@]}"; do
+    local keytype="${key%%:*}"
+    local keyfile="${ETCDIR}/ssh/ssh_host_${keytype}_key"
+    echo "HostKey ${keyfile}" >>"${ETCDIR}/ssh/sshd_config"
+  done
+
+  cat >>"${ETCDIR}/ssh/sshd_config" <<\EOCONF
+Match Host *
+  PasswordAuthentication no
+  PubkeyAuthentication yes
+
+Match Group duo
+  AllowTcpForwarding no
+  X11Forwarding no
+  ForceCommand /usr/sbin/login_duo
+EOCONF
+
+  chown -R sshd:root "${ETCDIR}/ssh"
 }
 
 def admin-hostname "[hostname-template]
@@ -806,6 +872,8 @@ __run_admin-rsyslog() {
   local syslog_address="${1}"
   local rsyslog_papertrail_conf="${ETCDIR}/rsyslog.d/65-papertrail.conf"
   local syslog_address_file="${RUNDIR}/syslog-address"
+  local papertrail_ca="${ETCDIR}/papertrail-bundle.pem"
+  local papertrail_ca_url='https://papertrailapp.com/tools/papertrail-bundle.pem'
 
   if [[ ! "${syslog_address}" ]]; then
     syslog_address="$(cat "${syslog_address_file}" 2>/dev/null)"
@@ -816,10 +884,50 @@ __run_admin-rsyslog() {
     __run_help admin-rsyslog 2
   fi
 
+  curl -sSL -o "${papertrail_ca}" "${papertrail_ca_url}"
+  chmod 0444 "${papertrail_ca}"
+
   mkdir -p "$(dirname "${rsyslog_papertrail_conf}")"
-  touch "${rsyslog_papertrail_conf}"
-  sed -i '/^\*\.\*.*@/d' "${rsyslog_papertrail_conf}"
-  echo "*.* @${syslog_address}" >>"${rsyslog_papertrail_conf}"
+
+  cat >"${ETCDIR}/rsyslog.d/50-default.conf" <<\EOCONF
+auth,authpriv.* -/var/log/auth.log
+*.*;auth,authpriv.none -/var/log/syslog
+daemon.* -/var/log/daemon.log
+kern.* -/var/log/kern.log
+mail.* -/var/log/mail.log
+user.* -/var/log/user.log
+mail.info -/var/log/mail.info
+mail.warn -/var/log/mail.warn
+mail.err -/var/log/mail.err
+news.crit -/var/log/news/news.crit
+news.err -/var/log/news/news.err
+news.notice -/var/log/news/news.notice
+*.=debug;auth,authpriv.none;news.none;mail.none -/var/log/debug
+*.=info;*.=notice;*.=warn;auth,authpriv.none;cron,daemon.none;mail,news.none -/var/log/messages
+*.emerg :omusrmsg:*
+EOCONF
+
+  cat >"${rsyslog_papertrail_conf}" <<EOCONF
+\$DefaultNetstreamDriverCAFile ${ETCDIR}/papertrail-bundle.pem
+\$DefaultNetstreamDriver gtls
+\$ActionSendStreamDriverMode 1
+\$ActionSendStreamDriverAuthMode x509/name
+\$ActionSendStreamDriverPermittedPeer *.papertrailapp.com
+\$ActionResumeRetryCount -1
+\$ActionResumeInterval 10
+\$ActionQueueType LinkedList
+\$ActionQueueMaxDiskSpace 1G
+\$ActionQueueFileName papertrailqueue
+\$ActionQueueSize 100000
+\$ActionQueueDiscardMark 97500
+\$ActionQueueHighWaterMark 80000
+\$ActionQueueCheckpointInterval 100
+\$ActionQueueSaveOnShutdown on
+\$ActionQueueTimeoutEnqueue 10
+\$ActionQueueDiscardSeverity 0
+
+*.* @${syslog_address}
+EOCONF
 
   systemctl stop rsyslog || true
   systemctl start rsyslog || true
