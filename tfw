@@ -281,7 +281,7 @@ EOGROUPSUDO
 }
 
 __bootstrap_instance_metadata() {
-  cat >"${inst_conf}" <<EOCONF
+  cat >"${ETCDIR}/default/travis-instance-local" <<EOCONF
 # generated $(date -u)
 export TRAVIS_INSTANCE_ID=$(__get_instance_id)
 export TRAVIS_INSTANCE_IPV4=$(__get_instance_ipv4)
