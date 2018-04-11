@@ -388,9 +388,9 @@ __run_app-extract() {
   if docker cp "${tmpcontainer}:/app/systemd.service" "${service_dest_tmp}"; then
     local dest
     dest="$(__run_gsub "${name}" "${service_dest_tmp}" "${service_dest}")"
-    echo "Extracted ${dest}"
+    __info extracted name="${name}" dest="${dest}"
   else
-    echo "WARN: No systemd.service file found for ${name}" >&2
+    __warn no systemd.service file found name="${name}"
   fi
 
   if docker cp "${tmpcontainer}:/app/systemd-wrapper" "${wrapper_dest_tmp}"; then
