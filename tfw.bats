@@ -178,8 +178,8 @@ teardown() {
     [[ "${status}" -eq 0 ]]
     [[ -r "${ETCDIR}/systemd/system/tfwtest.service" ]]
     [[ -x "${USRSBINDIR}/tfwtest-wrapper" ]]
-    [[ "${output}" =~ Extracted.+tfwtest.service ]]
-    [[ "${output}" =~ Extracted.*tfwtest-wrapper ]]
+    [[ "${output}" =~ extracted.+tfwtest.service ]]
+    [[ "${output}" =~ extracted.*tfwtest-wrapper ]]
 
     local service_content
     service_content="$(cat "${ETCDIR}/systemd/system/tfwtest.service")"
