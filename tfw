@@ -739,7 +739,7 @@ __enable_fail2ban_ssh_jail() {
   mkdir -p "${confdir}"
   cat >"${confdir}/jail.d/99-enable-ssh.local" <<EOF
 # Written via tfw :heart:
-[ssh]
+[sshd]
 enabled = true
 maxretry = ${ssh_maxretry}
 bantime = ${ssh_bantime}
