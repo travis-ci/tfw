@@ -281,12 +281,6 @@ EOGROUPSUDO
 }
 
 __bootstrap_instance_metadata() {
-  local inst_conf="${ETCDIR}/default/travis-instance-local"
-  if [[ -f "${inst_conf}" ]]; then
-    __info "found ${inst_conf}; skipping metadata setup"
-    return
-  fi
-
   cat >"${inst_conf}" <<EOCONF
 # generated $(date -u)
 export TRAVIS_INSTANCE_ID=$(__get_instance_id)
