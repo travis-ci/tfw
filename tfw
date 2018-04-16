@@ -282,7 +282,7 @@ EOCONF
   chmod 0644 "${override_conf}"
   chown -R root:root "$(dirname "${override_conf}")"
 
-  local grubd_travis="${ETCDIR}/default/grub.d/99travis"
+  local grubd_travis="${ETCDIR}/default/grub.d/99travis.cfg"
   mkdir -p "$(dirname "${grubd_travis}")"
   cat >"${grubd_travis}" <<\EOGRUB
 GRUB_CMDLINE_LINUX="$GRUB_CMDLINE_LINUX cgroup_enable=memory swapaccount=1"
@@ -1138,7 +1138,7 @@ __run_admin-docker-volume-setup() {
 
   if [[ -e "${DEVDIR}/direct-lvm/metadata" ]]; then
     __info metadata volume already exists
-    exit 0
+    return
   fi
 
   pvcreate -y "${device}"
