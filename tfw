@@ -1133,8 +1133,8 @@ By default, the {device} value is /dev/md0 (as created by admin-raid) and the
 {metadata-size} is 2G.
 "
 __run_admin-docker-volume-setup() {
-  local device="${1:=/dev/md0}"
-  local metadata_size="${2:=2G}"
+  local device="${1:-/dev/md0}"
+  local metadata_size="${2:-2G}"
 
   if [[ -e "${DEVDIR}/direct-lvm/metadata" ]]; then
     __info metadata volume already exists
