@@ -280,6 +280,12 @@ ExecStart=${full_tfw} admin-run-docker
 EOCONF
   chmod 0644 "${override_conf}"
   chown -R root:root "$(dirname "${override_conf}")"
+
+  local grubd_travis="${ETCDIR}/default/grub.d/99travis"
+  mkdir -p "$(dirname "${grubd_travis}")"
+  cat >"${grubd_travis}" <<\EOGRUB
+GRUB_CMDLINE_LINUX="$GRUB_CMDLINE_LINUX cgroup_enable=memory swapaccount=1"
+EOGRUB
 }
 
 __bootstrap_sudo() {
