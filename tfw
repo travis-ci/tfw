@@ -37,6 +37,7 @@ __TFW_DEPENDENCIES__=(
   'systemctl'
   'tee'
   'tr'
+  'update-grub'
   'useradd'
 )
 
@@ -286,6 +287,7 @@ EOCONF
   cat >"${grubd_travis}" <<\EOGRUB
 GRUB_CMDLINE_LINUX="$GRUB_CMDLINE_LINUX cgroup_enable=memory swapaccount=1"
 EOGRUB
+  update-grub
 }
 
 __bootstrap_sudo() {
