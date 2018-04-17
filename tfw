@@ -37,6 +37,7 @@ __TFW_DEPENDENCIES__=(
   'systemctl'
   'tee'
   'tr'
+  'update-grub'
   'useradd'
 )
 
@@ -137,11 +138,13 @@ Junk drawer utility stuff:
 Administrivia:
 
   admin-bootstrap
+  admin-docker-volume-setup
   admin-duo
   admin-hostname
   admin-librato
   admin-raid
   admin-rsyslog
+  admin-run-docker
   admin-ssh
   admin-travis-sudo
   admin-users
@@ -238,6 +241,7 @@ EOCONF
     curl \
     debian-archive-keyring \
     fail2ban \
+    lvm2 \
     openssh-client \
     openssh-server \
     pssh \
@@ -246,15 +250,44 @@ EOCONF
     software-properties-common \
     sudo \
     whois \
+    xfsprogs \
     zsh
 }
 
 __bootstrap_docker() {
-  if docker version; then
-    return
+  if ! docker version; then
+    curl -sSL https://get.docker.io | bash
   fi
 
-  curl -sSL https://get.docker.io | bash
+  local default_link="${ETCDIR}/systemd/network/99-default.link"
+
+  cat >"${default_link}" <<EOLINK
+[Link]
+NamePolicy=kernel database onboard slot path
+MACAddressPolicy=none
+EOLINK
+  chmod 0644 "${default_link}"
+  chown root:root "${default_link}"
+
+  local override_conf="${ETCDIR}/systemd/system/docker.service.d/override.conf"
+  local full_tfw
+  full_tfw="$(readlink -fn "${0}")"
+
+  mkdir -p "$(dirname "${override_conf}")"
+  cat >"${override_conf}" <<EOCONF
+[Service]
+ExecStart=
+ExecStart=${full_tfw} admin-run-docker
+EOCONF
+  chmod 0644 "${override_conf}"
+  chown -R root:root "$(dirname "${override_conf}")"
+
+  local grubd_travis="${ETCDIR}/default/grub.d/99travis.cfg"
+  mkdir -p "$(dirname "${grubd_travis}")"
+  cat >"${grubd_travis}" <<\EOGRUB
+GRUB_CMDLINE_LINUX="$GRUB_CMDLINE_LINUX cgroup_enable=memory swapaccount=1"
+EOGRUB
+  update-grub
 }
 
 __bootstrap_sudo() {
@@ -581,8 +614,8 @@ __fetch_instance_metadata_packet() {
 
 def admin-bootstrap "
 
-Run all admin-* tasks, attempting to fetch configuration from \${ETCDIR}/default
-files in the following order, with relevant variables:
+Run multiple admin-* tasks, attempting to fetch configuration from
+\${ETCDIR}/default files in the following order, with relevant variables:
 
 \${ETCDIR}/default/tfw
   + TFW_DUO_CONF - path to a duo config file
@@ -616,6 +649,7 @@ __run_admin-bootstrap() {
     # shellcheck source=/dev/null
     source "${ETCDIR}/default/github-users"
 
+    # shellcheck disable=SC2153
     : "${GITHUB_USERS:=${TFW_GITHUB_USERS}}"
   fi
 
@@ -958,6 +992,28 @@ __run_admin-raid() {
     "${raid_devices[@]}"
 }
 
+def admin-run-docker "
+
+Run dockerd in the foreground after reading the necessary configuration bits and
+potentially running admin-docker-volume-setup.
+"
+__run_admin-run-docker() {
+  DOCKERD="${USRBINDIR}/dockerd"
+  DOCKER_OPTS=
+
+  eval "$(__run_app-printenv docker)"
+
+  if [[ -f "${ETCDIR}/docker/daemon-direct-lvm.json" ]] &&
+    [[ -z "${TRAVIS_DOCKER_DISABLE_DIRECT_LVM}" ]]; then
+    __run_admin-docker-volume-setup \
+      "${TRAVIS_DOCKER_VOLUME_DEVICE}" "${TRAVIS_DOCKER_VOLUME_METADATA_SIZE}"
+    DOCKER_OPTS="$DOCKER_OPTS --config-file=${ETCDIR}/docker/daemon-direct-lvm.json"
+  fi
+
+  # shellcheck disable=SC2086
+  exec "${DOCKERD}" $DOCKER_OPTS --raw-logs
+}
+
 def admin-duo "[duo-conf]
 
 If a configuration file is present at [duo-conf] (default /var/tmp/duo.conf),
@@ -1070,6 +1126,32 @@ Hostname "${HOSTNAME}"
 EOF
 
   systemctl restart collectd || true
+}
+
+def admin-docker-volume-setup "[device] [metadata-size]
+
+Ensure a direct-lvm volume is present for use with the Docker storage backend.
+By default, the {device} value is /dev/md0 (as created by admin-raid) and the
+{metadata-size} is 2G.
+"
+__run_admin-docker-volume-setup() {
+  local device="${1:-/dev/md0}"
+  local metadata_size="${2:-2G}"
+
+  if [[ -e "${DEVDIR}/direct-lvm/metadata" ]]; then
+    __info metadata volume already exists
+    return
+  fi
+
+  pvcreate -y "${device}"
+
+  vgcreate direct-lvm "${device}"
+
+  lvcreate -n metadata direct-lvm --size "${metadata_size}"
+  dd if=/dev/zero of=/dev/direct-lvm/metadata bs=1M count=10
+
+  lvcreate -n data direct-lvm -l '100%FREE'
+  dd if=/dev/zero of=/dev/direct-lvm/data bs=1M count=10
 }
 
 main "${@}"
