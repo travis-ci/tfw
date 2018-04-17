@@ -649,6 +649,7 @@ __run_admin-bootstrap() {
     # shellcheck source=/dev/null
     source "${ETCDIR}/default/github-users"
 
+    # shellcheck disable=SC2153
     : "${GITHUB_USERS:=${TFW_GITHUB_USERS}}"
   fi
 
@@ -1004,7 +1005,8 @@ __run_admin-run-docker() {
 
   if [[ -f "${ETCDIR}/docker/daemon-direct-lvm.json" ]] &&
     [[ -z "${TRAVIS_DOCKER_DISABLE_DIRECT_LVM}" ]]; then
-    __run_admin-docker-volume-setup
+    __run_admin-docker-volume-setup \
+      "${TRAVIS_DOCKER_VOLUME_DEVICE}" "${TRAVIS_DOCKER_VOLUME_METADATA_SIZE}"
     DOCKER_OPTS="$DOCKER_OPTS --config-file=${ETCDIR}/docker/daemon-direct-lvm.json"
   fi
 
