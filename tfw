@@ -14,6 +14,7 @@ declare -A __TFW_HELP_DOC__
 __TFW_DEPENDENCIES__=(
   'apt-get'
   'apt-key'
+  'at'
   'awk'
   'bash'
   'cat'
@@ -780,7 +781,9 @@ bantime = ${ssh_bantime}
 EOF
 
   systemctl stop fail2ban || true
-  systemctl start fail2ban || true
+
+  # NOTE: re-enable fail2ban in the future to allow for a provisioning window
+  echo 'systemctl start fail2ban' | at now + 60 minutes || true
 }
 
 __ensure_server_ssh_keys() {
