@@ -14,6 +14,7 @@ declare -A __TFW_HELP_DOC__
 __TFW_DEPENDENCIES__=(
   'apt-get'
   'apt-key'
+  'at'
   'awk'
   'bash'
   'cat'
