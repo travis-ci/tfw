@@ -14,7 +14,6 @@ declare -A __TFW_HELP_DOC__
 __TFW_DEPENDENCIES__=(
   'apt-get'
   'apt-key'
-  'at'
   'awk'
   'bash'
   'cat'
@@ -780,10 +779,10 @@ maxretry = ${ssh_maxretry}
 bantime = ${ssh_bantime}
 EOF
 
+  # NOTE: Disable fail2ban immediately, but re-enable after 1h to allow for a
+  #       provisioning window.
   systemctl stop fail2ban || true
-
-  # NOTE: re-enable fail2ban in the future to allow for a provisioning window
-  echo 'systemctl start fail2ban' | at now + 60 minutes || true
+  systemd-run --on-active='1h' --unit fail2ban.service
 }
 
 __ensure_server_ssh_keys() {
