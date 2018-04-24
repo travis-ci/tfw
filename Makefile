@@ -45,3 +45,8 @@ ensure-shfmt:
 		chmod +x "$(HOME)/bin/shfmt"; \
 		shfmt -version; \
 	fi
+
+.PHONY: readme
+readme:
+	sed -i '/^## Usage/q' README.md
+	./tfw --help | awk -F'[ ,]+' '/^  [a-z]/{printf "\n### tfw help %s\n\n", $$2; system("./tfw help "$$2)}' >>README.md
