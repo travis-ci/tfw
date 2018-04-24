@@ -49,5 +49,5 @@ ensure-shfmt:
 .PHONY: readme
 readme:
 	sed -i '/^## Usage/q' README.md
-	./tfw help >>README.md
-	./tfw help | awk -F'[ ,]+' '/^  [a-z]/{printf "\n### tfw help %s\n\n", $$2; system("./tfw help "$$2)}' >>README.md
+	{ echo '```sh'; ./tfw help; echo '```'; } >>README.md
+	./tfw help | awk -F'[ ,]+' '/^  [a-z]/{printf "\n### tfw help %s\n\n```sh\n", $$2; system("./tfw help "$$2);print "```"}' >>README.md
