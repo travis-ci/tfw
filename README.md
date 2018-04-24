@@ -11,6 +11,38 @@ downloaded and used for a variety of tasks performed during the process of
 bringing a Docker-empowered VM into service.
 
 ## Usage
+tfw <command> [${more-stuff(1)}, ${maybe(2)}]
+
+  help, h, -h, --help       - echo this string or get help for another command
+  version, v, -v, --version - echo version and exit
+
+  bootstrap, b
+
+Docker image configuration and deployment stuff:
+
+  app-extract, extract, e
+  app-printenv, printenv, p
+  app-writeenv, writeenv, w
+
+Junk drawer utility stuff:
+
+  urldecode, d
+  gsub, g
+
+Administrivia:
+
+  admin-bootstrap
+  admin-docker-volume-setup
+  admin-duo
+  admin-hostname
+  admin-librato
+  admin-raid
+  admin-rsyslog
+  admin-run-docker
+  admin-ssh
+  admin-travis-sudo
+  admin-users
+
 
 ### tfw help help
 
