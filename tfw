@@ -1005,10 +1005,11 @@ __run_admin-run-docker() {
 
   eval "$(__run_app-printenv docker)"
 
-  if [[ -f "${ETCDIR}/docker/daemon-direct-lvm.json" ]] &&
-    [[ -z "${TRAVIS_DOCKER_DISABLE_DIRECT_LVM}" ]]; then
+  if [[ -z "${TRAVIS_DOCKER_DISABLE_DIRECT_LVM}" ]]; then
     __run_admin-docker-volume-setup \
-      "${TRAVIS_DOCKER_VOLUME_DEVICE}" "${TRAVIS_DOCKER_VOLUME_METADATA_SIZE}"
+      "${TRAVIS_DOCKER_VOLUME_DEVICE}" \
+      "${TRAVIS_DOCKER_VOLUME_METADATA_SIZE}" \
+      "${TRAVIS_DOCKER_STORAGE_DM_BASESIZE}"
     DOCKER_OPTS="$DOCKER_OPTS --config-file=${ETCDIR}/docker/daemon-direct-lvm.json"
   fi
 
@@ -1130,19 +1131,55 @@ EOF
   systemctl restart collectd || true
 }
 
-def admin-docker-volume-setup "[device] [metadata-size]
+def admin-docker-volume-setup "[device] [metadata-size] [dm-basesize]
 
-Ensure a direct-lvm volume is present for use with the Docker storage backend.
-By default, the {device} value is /dev/md0 (as created by admin-raid) and the
-{metadata-size} is 2G.
+Ensure a direct-lvm volume is present for use with the Docker storage backend,
+and write a Docker daemon config file to use it.  By default, the {device} value
+is detected, the {metadata-size} is 2G, and the {dm-basesize} is 19G.
 "
 __run_admin-docker-volume-setup() {
-  local device="${1:-/dev/md0}"
+  if ! __ensure_direct_lvm_setup "${1}" "${2}"; then
+    return
+  fi
+
+  local dm_basesize="${3:-19G}"
+
+  cat >"${ETCDIR}/docker/daemon-direct-lvm.json" <<EOJSON
+{
+  "data-root": "/mnt/docker",
+  "hosts": [
+    "tcp://127.0.0.1:4243",
+    "unix:///var/run/docker.sock"
+  ],
+  "icc": false,
+  "storage-driver": "devicemapper",
+  "storage-opts": [
+    "dm.basesize=${dm_basesize}",
+    "dm.datadev=/dev/direct-lvm/data",
+    "dm.metadatadev=/dev/direct-lvm/metadata",
+    "dm.fs=xfs"
+  ],
+  "userns-remap": "default"
+}
+EOJSON
+}
+
+__ensure_direct_lvm_setup() {
+  local device="${1}"
   local metadata_size="${2:-2G}"
+
+  if [[ ! "${device}" ]]; then
+    device="$(awk '/active raid/ { print $1 }' </proc/mdstat)"
+  fi
+
+  if [[ ! "${device}" ]]; then
+    __error no lvm device specified or found
+    return 1
+  fi
 
   if [[ -e "${DEVDIR}/direct-lvm/metadata" ]]; then
     __info metadata volume already exists
-    return
+    return 0
   fi
 
   pvcreate -y "${device}"
@@ -1154,6 +1191,7 @@ __run_admin-docker-volume-setup() {
 
   lvcreate -n data direct-lvm -l '100%FREE'
   dd if=/dev/zero of=/dev/direct-lvm/data bs=1M count=10
+  return 0
 }
 
 main "${@}"
