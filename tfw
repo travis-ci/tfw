@@ -1169,7 +1169,12 @@ __ensure_direct_lvm_setup() {
   local metadata_size="${2:-2G}"
 
   if [[ ! "${device}" ]]; then
-    device="$(awk '/active raid/ { print $1 }' </proc/mdstat)"
+    local device_basename
+    device_basename="$(awk '/active raid/ { print $1; exit }' </proc/mdstat)"
+
+    if [[ "${device_basename}" ]]; then
+      device="/dev/${device_basename}"
+    fi
   fi
 
   if [[ ! "${device}" ]]; then
