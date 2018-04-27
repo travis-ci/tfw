@@ -23,3 +23,5 @@ Ask for help about a particular command:
 ``` bash
 tfw help printenv
 ```
+
+See also: [USAGE.md](USAGE.md)

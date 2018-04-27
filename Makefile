@@ -45,3 +45,8 @@ ensure-shfmt:
 		chmod +x "$(HOME)/bin/shfmt"; \
 		shfmt -version; \
 	fi
+
+.PHONY: usage
+usage:
+	echo '# Usage' >>USAGE.md
+	./tfw help | awk -F'[ ,]+' '/^  [a-z]/{printf "\n## tfw help %s\n\n```sh\n", $$2; system("./tfw help "$$2);print "```"}' >>USAGE.md
