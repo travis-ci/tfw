@@ -445,10 +445,11 @@ def gsub,s "<name> <infile> [outfile]
 Substitute strings with platform and instance-dependent runtime values,
 optionally writing to an output file.
 
-  ___INSTANCE_ID___   - instance identifier, e.g. i-fafafaf
-  ___INSTANCE_NAME___ - instance name, e.g. production-8-juicero-f-2-gce
-  ___INSTANCE_IPV4___ - instance ipv4 address, e.g. 10.10.9.8
-  ___REGION_ZONE__    - region + zone, e.g. us-central1-d
+  ___INSTANCE_ID___      - instance identifier, e.g. i-fafafaf
+  ___INSTANCE_ID_FULL___ - instance identifier (not truncated), e.g. fafafafa-fafa-fafa-fafa-fafafafafafa
+  ___INSTANCE_NAME___    - instance name, e.g. production-8-juicero-f-2-gce
+  ___INSTANCE_IPV4___    - instance ipv4 address, e.g. 10.10.9.8
+  ___REGION_ZONE___      - region + zone, e.g. us-central1-d
 "
 __run_gsub() {
   local name="${1}"
@@ -481,6 +482,7 @@ __run_gsub() {
   local instance_ipv4 instance_id instance_name region_zone
   instance_ipv4="$(__get_instance_ipv4)"
   instance_id="$(__get_instance_id)"
+  instance_id_full="$(__get_instance_id_full)"
   instance_name="$(__get_instance_name)"
   region_zone="$(__get_instance_region_zone)"
   local systemd_wrapper_path
@@ -490,6 +492,7 @@ __run_gsub() {
     line="${line//___SYSTEMD_WRAPPER___/${systemd_wrapper_path}}"
     line="${line//___INSTANCE_IPV4___/${instance_ipv4}}"
     line="${line//___INSTANCE_ID___/${instance_id}}"
+    line="${line//___INSTANCE_ID_FULL___/${instance_id_full}}"
     line="${line//___INSTANCE_NAME___/${instance_name}}"
     line="${line//___REGION_ZONE___/${region_zone}}"
     echo "${line}"
@@ -514,6 +517,19 @@ __get_instance_id() {
     value="$(cat "${RUNDIR}/instance-id")"
   fi
   echo "${value}"
+}
+
+__get_instance_id_full() {
+  __ensure_instance_metadata
+
+  local value
+  if [[ -s "${RUNDIR}/instance-id-full" ]]; then
+    value="$(cat "${RUNDIR}/instance-id-full")"
+  elif [[ -s "${RUNDIR}/instance-id" ]]; then
+    value="$(cat "${RUNDIR}/instance-id")"
+  fi
+
+  echo "${value:-i-fafafaf}"
 }
 
 __get_instance_name() {
@@ -604,6 +620,7 @@ __fetch_instance_metadata_packet() {
 
   curl -sSL "${packet_metadata}" >"${RUNDIR}/metadata.json"
   jq -r .id <"${RUNDIR}/metadata.json" | cut -d- -f 1 >"${RUNDIR}/instance-id"
+  jq -r .id <"${RUNDIR}/metadata.json" >"${RUNDIR}/instance-id-full"
   jq -r .hostname <"${RUNDIR}/metadata.json" >"${RUNDIR}/instance-name"
   jq -r ".network.addresses | .[] | \
     select(.address_family==4 and .public==false) | \
