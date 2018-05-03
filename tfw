@@ -982,15 +982,24 @@ EOCONF
 
 def admin-raid "[device] [raid-level]
 
-Set up a multi-disk volume at [device] (default /dev/md0) with raid level
+Set up a multi-disk volume at [device] (default detected) with raid level
 [raid-level] (default 0) from all available disks, as determined by looking at
 all available /dev/sd* devices.
 "
 __run_admin-raid() {
-  local device="${1:-/dev/md0}"
+  local device="${1}"
   local raid_level="${2:-0}"
   local raid_devices_string
   local raid_devices=()
+
+  if [[ ! "${device}" ]]; then
+    local device_basename
+    device_basename="$(awk '/active raid/ { print $1; exit }' </proc/mdstat)"
+
+    if [[ "${device_basename}" ]]; then
+      device="/dev/${device_basename}"
+    fi
+  fi
 
   if [[ -e "${device}" ]]; then
     return
