@@ -604,6 +604,7 @@ __fetch_instance_metadata_packet() {
 
   curl -sSL "${packet_metadata}" >"${RUNDIR}/metadata.json"
   jq -r .id <"${RUNDIR}/metadata.json" | cut -d- -f 1 >"${RUNDIR}/instance-id"
+  jq -r .id <"${RUNDIR}/metadata.json" >"${RUNDIR}/instance-id-full"
   jq -r .hostname <"${RUNDIR}/metadata.json" >"${RUNDIR}/instance-name"
   jq -r ".network.addresses | .[] | \
     select(.address_family==4 and .public==false) | \
