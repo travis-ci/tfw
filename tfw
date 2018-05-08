@@ -1035,7 +1035,8 @@ __run_admin-run-docker() {
     __run_admin-docker-volume-setup \
       "${TRAVIS_DOCKER_VOLUME_DEVICE}" \
       "${TRAVIS_DOCKER_VOLUME_METADATA_SIZE}" \
-      "${TRAVIS_DOCKER_STORAGE_DM_BASESIZE}"
+      "${TRAVIS_DOCKER_STORAGE_DM_BASESIZE}" \
+      "${TRAVIS_DOCKER_DEBUG}"
     DOCKER_OPTS="$DOCKER_OPTS --config-file=${ETCDIR}/docker/daemon-direct-lvm.json"
   fi
 
@@ -1157,7 +1158,7 @@ EOF
   systemctl restart collectd || true
 }
 
-def admin-docker-volume-setup "[device] [metadata-size] [dm-basesize]
+def admin-docker-volume-setup "[device] [metadata-size] [dm-basesize] [debug]
 
 Ensure a direct-lvm volume is present for use with the Docker storage backend,
 and write a Docker daemon config file to use it.  By default, the {device} value
@@ -1169,9 +1170,11 @@ __run_admin-docker-volume-setup() {
   fi
 
   local dm_basesize="${3:-19G}"
+  local debug="${4}"
 
   cat >"${ETCDIR}/docker/daemon-direct-lvm.json" <<EOJSON
 {
+  $(if [[ "${debug}" ]]; then echo '"debug": true, '; fi)
   "data-root": "/mnt/docker",
   "hosts": [
     "tcp://127.0.0.1:4243",
