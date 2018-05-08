@@ -3,6 +3,7 @@
 set -o errexit
 set -o pipefail
 
+# shellcheck disable=SC2153
 if [[ "${DEBUG}" ]]; then
   set -o xtrace
 fi
