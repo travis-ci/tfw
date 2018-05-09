@@ -887,7 +887,7 @@ optional {hostname-template} (default=\${RUNDIR}/instance-hostname.tmpl).
 "
 __run_admin-hostname() {
   local hostname_template="${1:-${RUNDIR}/instance-hostname.tmpl}"
-  local hosts_line
+  local hosts_line local_hosts_line
   local instance_hostname
   instance_hostname="$(__run_gsub 'instance-hostname' "${hostname_template}")"
 
@@ -895,18 +895,28 @@ __run_admin-hostname() {
     __warn 'No instance hostname generated'
   fi
 
+  local_hosts_line="127.0.1.1 ${instance_hostname} ${instance_hostname%%.*}"
+
   hosts_line="$(__get_instance_ipv4)"
   if [[ "${hosts_line}" ]]; then
     hosts_line="${hosts_line} ${instance_hostname} ${instance_hostname%%.*}"
   fi
 
-  echo "${instance_hostname}" >"${ETCDIR}/hostname"
+  echo "${instance_hostname%%.*}" >"${ETCDIR}/hostname"
   echo "${instance_hostname}" >"${RUNDIR}/instance-hostname"
 
   hostname -F "${ETCDIR}/hostname"
 
   if ! grep -q "^${hosts_line}" "${ETCDIR}/hosts"; then
-    echo "${hosts_line}" >>"${ETCDIR}/hosts"
+    echo "${hosts_line}" >"${TMPDIR}/hosts.tmp"
+    cat "${ETCDIR}/hosts" >>"${TMPDIR}/hosts.tmp"
+    cp -v "${TMPDIR}/hosts.tmp" "${ETCDIR}/hosts"
+  fi
+
+  if ! grep -q "^${local_hosts_line}" "${ETCDIR}/hosts"; then
+    echo "${local_hosts_line}" >"${TMPDIR}/hosts.tmp"
+    cat "${ETCDIR}/hosts" >>"${TMPDIR}/hosts.tmp"
+    cp -v "${TMPDIR}/hosts.tmp" "${ETCDIR}/hosts"
   fi
 }
 
