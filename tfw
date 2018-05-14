@@ -1001,6 +1001,10 @@ __run_admin-raid() {
     fi
   fi
 
+  if [[ ! "${device}" ]]; then
+    device="/dev/md0"
+  fi
+
   if [[ -e "${device}" ]]; then
     return
   fi
