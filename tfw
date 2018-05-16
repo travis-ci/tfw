@@ -59,9 +59,16 @@ main() {
   : "${VARLIBDIR:=/var/lib}"
   : "${VARTMPDIR:=/var/tmp}"
 
+  export DEVDIR DIST ETCDIR OPTDIR RUNDIR TMPDIR USRBINDIR USRSBINDIR \
+    VARCACHEDIR VARLIBDIR VARTMPDIR
+
   local command="${1}"
   shift || true
-  if "__run_${command:-help}" "${@}"; then
+  if command -v "__run_${command:-help}" &>/dev/null &&
+    "__run_${command:-help}" "${@}"; then
+    exit 0
+  elif command -v "tfw-${command}" &>/dev/null &&
+    "tfw-${command}" "${@}"; then
     exit 0
   fi
   __run_help '' 1
@@ -151,6 +158,23 @@ Administrivia:
   admin-users
 
 EOUSAGE
+
+  shopt -s nullglob
+  local external_commands=()
+  for path_prefix in ${PATH//:/ }; do
+    for exe in "${path_prefix}"/tfw-*; do
+      external_commands=("${external_commands[@]}" "${exe##*tfw-}")
+    done
+  done
+
+  if [[ "${#external_commands[@]}" -gt 0 ]]; then
+    echo 'External commands:'
+    for cmd in "${external_commands[@]}"; do
+      echo "  ${cmd}"
+    done
+    echo
+  fi
+
   exit "${exit_code}"
 }
 
