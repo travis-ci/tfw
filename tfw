@@ -58,6 +58,8 @@ main() {
   export DEVDIR DIST ETCDIR OPTDIR RUNDIR TMPDIR USRBINDIR USRSBINDIR \
     VARCACHEDIR VARLIBDIR VARTMPDIR
 
+  export PATH="${PATH}:$(dirname "${BASH_SOURCE[0]}")/libexec"
+
   for rcfile in "${ETCDIR}/tfwrc" "${HOME}/.tfwrc"; do
     if [[ -s "${rcfile}" ]]; then
       # shellcheck source=/dev/null
