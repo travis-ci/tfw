@@ -43,10 +43,6 @@ __TFW_DEPENDENCIES__=(
 )
 
 main() {
-  for key in "${!__TFW_ALIASES__[@]}"; do
-    eval "__run_${key}() { __run_${__TFW_ALIASES__[${key}]} \"\${@}\"; }"
-  done
-
   : "${DEVDIR:=/dev}"
   : "${DIST:=$(lsb_release -sc)}"
   : "${ETCDIR:=/etc}"
@@ -61,6 +57,17 @@ main() {
 
   export DEVDIR DIST ETCDIR OPTDIR RUNDIR TMPDIR USRBINDIR USRSBINDIR \
     VARCACHEDIR VARLIBDIR VARTMPDIR
+
+  for rcfile in "${ETCDIR}/tfwrc" "${HOME}/.tfwrc"; do
+    if [[ -s "${rcfile}" ]]; then
+      # shellcheck source=/dev/null
+      source "${rcfile}" || __error "failed to source '${rcfile}'"
+    fi
+  done
+
+  for key in "${!__TFW_ALIASES__[@]}"; do
+    eval "__run_${key}() { __run_${__TFW_ALIASES__[${key}]} \"\${@}\"; }"
+  done
 
   local command="${1}"
   shift || true
