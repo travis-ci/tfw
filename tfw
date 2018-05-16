@@ -58,7 +58,11 @@ main() {
   export DEVDIR DIST ETCDIR OPTDIR RUNDIR TMPDIR USRBINDIR USRSBINDIR \
     VARCACHEDIR VARLIBDIR VARTMPDIR
 
-  export PATH="${PATH}:$(dirname "${BASH_SOURCE[0]}")/libexec"
+  for path_entry in "${HOME}/.cache/tfw/libexec" \
+    "$(dirname "${BASH_SOURCE[0]}")/libexec" \
+    "${VARCACHEDIR}/tfw/libexec"; do
+    export PATH="${PATH}:${path_entry}"
+  done
 
   for rcfile in "${ETCDIR}/tfwrc" "${HOME}/.tfwrc"; do
     if [[ -s "${rcfile}" ]]; then
@@ -286,6 +290,12 @@ EOCONF
     whois \
     xfsprogs \
     zsh
+
+  apt-add-repository -y ppa:deadsnakes/ppa
+  apt-get update -yqq
+
+  apt-get install -yqq python3.6
+  ln -svf "$(command -v python3.6)" /usr/local/bin/python3
 }
 
 __bootstrap_docker() {

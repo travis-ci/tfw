@@ -1,0 +1,206 @@
+#!/usr/bin/env python3
+import argparse
+import logging
+import os
+import subprocess
+import sys
+import time
+
+
+def main(argv=sys.argv[:], env=os.environ):
+    parser = _build_argument_parser(env)
+    args = parser.parse_args(argv[1:])
+
+    logging_kwargs = dict(
+        level=logging.INFO,
+        style='{',
+        format='{name}:{asctime}:{levelname}:{message}',
+        datefmt='%Y-%m-%dT%H:%M:%S'
+    )
+
+    if args.debug:
+        logging_kwargs['level'] = logging.DEBUG
+
+    logging.basicConfig(**logging_kwargs)
+
+    logger = logging.getLogger(__file__)
+    cleaner = DockerContainerCleaner(
+        logger=logger,
+        tfw_exe=args.tfw_exe,
+        docker_exe=args.docker_exe
+    )
+
+    while True:
+        try:
+            cleaner.clean()
+            if args.once:
+                return 0
+            logger.info('sleeping interval=%s', args.sleep_interval)
+            time.sleep(args.sleep_interval)
+        except KeyboardInterrupt:
+            return 0
+
+    return 1
+
+
+def _build_argument_parser(env):
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument(
+        '-O', '--once',
+        action='store_true',
+        help='run once and exit',
+        default=_asbool(
+            env.get(
+                'TFW_ADMIN_CLEAN_CONTAINERS_ONCE',
+                env.get('ONCE', False)
+            )
+        )
+    )
+    parser.add_argument(
+        '-S', '--sleep-interval',
+        metavar='TFW_ADMIN_CLEAN_CONTAINERS_SLEEP_INTERVAL',
+        help='interval to sleep in seconds between cleanings',
+        type=float,
+        default=float(
+            env.get(
+                'TFW_ADMIN_CLEAN_CONTAINERS_SLEEP_INTERVAL',
+                env.get('SLEEP_INTERVAL', 60.0)
+            )
+        )
+    )
+    parser.add_argument(
+        '-m', '--max-age',
+        type=int,
+        metavar='TFW_ADMIN_CLEAN_CONTAINERS_MAX_AGE',
+        help='max container age allowed in seconds',
+        default=int(
+            env.get(
+                'TFW_ADMIN_CLEAN_CONTAINERS_MAX_AGE',
+                env.get('MAX_AGE', 7200)
+            )
+        )
+    )
+    parser.add_argument(
+        '-T', '--tfw-exe',
+        metavar='TFW_ADMIN_CLEAN_CONTAINERS_TFW_EXE',
+        help='tfw executable',
+        default=env.get(
+            'TFW_ADMIN_CLEAN_CONTAINERS_TFW_EXE',
+            env.get('TFW_EXE', 'tfw')
+        )
+    )
+    parser.add_argument(
+        '-d', '--docker-exe',
+        metavar='TFW_ADMIN_CLEAN_CONTAINERS_DOCKER_EXE',
+        help='docker executable',
+        default=env.get(
+            'TFW_ADMIN_CLEAN_CONTAINERS_DOCKER_EXE',
+            env.get('DOCKER_EXE', 'docker')
+        )
+    )
+    parser.add_argument(
+        '-D', '--debug',
+        type=_asbool,
+        metavar='TFW_ADMIN_CLEAN_CONTAINERS_DEBUG',
+        help='enable debug level logging',
+        default=_asbool(
+            env.get(
+                'TFW_ADMIN_CLEAN_CONTAINERS_DEBUG',
+                env.get('DEBUG', False)
+            )
+        )
+    )
+
+    return parser
+
+
+class DockerContainerCleaner:
+
+    def __init__(self, logger=None, tfw_exe='tfw', docker_exe='docker'):
+        self._logger = \
+            logger if logger is not None else logging.getLogger(__name__)
+        self._tfw_exe = tfw_exe
+        self._docker_exe = docker_exe
+
+    def clean(self):
+        max_age = self._calc_max_age()
+        not_killed_count = 0
+        killed_count = 0
+        status = 'noop'
+
+        cids = self._fetch_travis_job_cids()
+        if len(cids) == 0:
+            self._logger.warning('no containers running, aborting')
+            return
+
+        for cid in cids:
+            container_name = self._fetch_container_name(cid)
+            if self._container_must_be_cleaned(cid, max_age):
+                self._logger.info(
+                    '{} must be cleaned; removing! (name={})'.format(
+                        cid, container_name
+                    )
+                )
+
+                self._docker_kill(cid) or self._logger.warning(
+                    'failed to kill container name={}'.format(container_name)
+                )
+                self._docker_stop(cid) or self._logger.warning(
+                    'failed to stop container name={}'.format(container_name)
+                )
+                self._docker_rm(cid) or self._logger.warning(
+                    'failed to remove container name={}'.format(container_name)
+                )
+
+                killed_count += 1
+                status = 'killed'
+            else:
+                not_killed_count += 1
+
+        self._report_cleanup_stats(
+            killed_count,
+            not_killed_count,
+            status
+        )
+
+    def _calc_max_age(self):
+        # TODO: Use min of 50m/2h or uptime of travis-worker
+        return 7200
+
+    def _fetch_travis_job_cids(self):
+        # TODO: Get job IDs via `docker ps`
+        return []
+
+    def _fetch_container_name(self, cid):
+        # TODO: Get container name via `docker inspect`
+        return ''
+
+    def _container_must_be_cleaned(self, cid, max_age):
+        # TODO: implementation!
+        return False
+
+    def _docker_kill(self, cid):
+        # TODO: implementation!
+        return True
+
+    def _docker_stop(self, cid):
+        # TODO: implementation!
+        return True
+
+    def _docker_rm(self, cid):
+        # TODO: implementation!
+        return True
+
+    def _report_cleanup_stats(self, killed_count, not_killed_count, status):
+        # TODO: implementation!
+        pass
+
+
+def _asbool(s):
+    return str(s).lower() in ['yes', 'on', '1', 'true']
+
+
+if __name__ == '__main__':
+    sys.exit(main())
