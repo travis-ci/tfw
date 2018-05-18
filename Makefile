@@ -57,7 +57,7 @@ USAGE.md: bin/tfw
 	./bin/tfw list-internal-commands | \
 		LC_ALL=C sort | \
 		awk '{ \
-			printf "\n## tfw help %s\n\n``` bash\n", $$1; \
+			printf "\n## tfw help %s\n\n```\n", $$1; \
 			system("./bin/tfw help "$$1); \
 			print "```" \
 		}' >>$@
