@@ -58,11 +58,9 @@ main() {
   export DEVDIR DIST ETCDIR OPTDIR RUNDIR TMPDIR USRBINDIR USRSBINDIR \
     VARCACHEDIR VARLIBDIR VARTMPDIR
 
-  for path_entry in "${HOME}/.cache/tfw/libexec" \
-    "$(dirname "${BASH_SOURCE[0]}")/libexec" \
-    "${VARCACHEDIR}/tfw/libexec"; do
-    export PATH="${PATH}:${path_entry}"
-  done
+  local here_dir
+  here_dir="$(dirname "${BASH_SOURCE[0]}")"
+  export PATH="${PATH}:${here_dir}"
 
   for rcfile in "${ETCDIR}/tfwrc" "${HOME}/.tfwrc"; do
     if [[ -s "${rcfile}" ]]; then
@@ -189,6 +187,25 @@ EOUSAGE
   fi
 
   exit "${exit_code}"
+}
+
+def list-internal-commands "
+
+List internal commands and exit 0 (used by usage documentation generation).
+"
+__run_list-internal-commands() {
+  local seen
+  declare -A seen
+  for cmd in "${!__TFW_HELP_DOC__[@]}"; do
+    if [[ "${seen[${cmd}]}" == yep ]]; then
+      continue
+    fi
+    if [[ "${__TFW_ALIASES__[${cmd}]}" ]]; then
+      continue
+    fi
+    echo "${cmd}"
+    seen[${cmd}]=yep
+  done
 }
 
 def version,v,-v,--version "

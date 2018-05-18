@@ -1,5 +1,6 @@
 SHELL := bash
 TMPDIR ?= /tmp
+PREFIX ?= /usr/local
 
 SHELLCHECK_URL := https://www.googleapis.com/download/storage/v1/b/shellcheck/o/shellcheck-v0.4.7.linux.x86_64.tar.xz?alt=media
 SHFMT_URL := https://github.com/mvdan/sh/releases/download/v2.2.0/shfmt_v2.2.0_linux_amd64
@@ -24,7 +25,7 @@ lint:
 	checkmake Makefile &>/dev/null
 	shfmt -f . | xargs shellcheck
 	shfmt -i 2 -w .
-	yapf -i -r -vv libexec/
+	yapf -i -r -vv bin/
 
 .PHONY: ensure-checkmake
 ensure-checkmake:
@@ -51,7 +52,16 @@ ensure-shfmt:
 		shfmt -version; \
 	fi
 
-.PHONY: usage
-usage:
-	echo '# Usage' >>USAGE.md
-	./tfw help | awk -F'[ ,]+' '/^  [a-z]/{printf "\n## tfw help %s\n\n```sh\n", $$2; system("./tfw help "$$2);print "```"}' >>USAGE.md
+USAGE.md: bin/tfw
+	echo '# Usage' >$@
+	./bin/tfw list-internal-commands | \
+		LC_ALL=C sort | \
+		awk '{ \
+			printf "\n## tfw help %s\n\n``` bash\n", $$1; \
+			system("./bin/tfw help "$$1); \
+			print "```" \
+		}' >>$@
+
+.PHONY: install
+install:
+	install -D -m 0755 -t $(PREFIX)/bin $(wildcard bin/*)
