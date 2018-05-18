@@ -58,6 +58,12 @@ main() {
   export DEVDIR DIST ETCDIR OPTDIR RUNDIR TMPDIR USRBINDIR USRSBINDIR \
     VARCACHEDIR VARLIBDIR VARTMPDIR
 
+  for path_entry in "${HOME}/.cache/tfw/libexec" \
+    "$(dirname "${BASH_SOURCE[0]}")/libexec" \
+    "${VARCACHEDIR}/tfw/libexec"; do
+    export PATH="${PATH}:${path_entry}"
+  done
+
   for rcfile in "${ETCDIR}/tfwrc" "${HOME}/.tfwrc"; do
     if [[ -s "${rcfile}" ]]; then
       # shellcheck source=/dev/null
@@ -267,6 +273,8 @@ EOCONF
     chmod 0755 "${d}"
   done
 
+  echo 'Etc/UTC' >"${ETCDIR}/timezone"
+
   apt-get install -yqq \
     apt-transport-https \
     bzip2 \
@@ -277,6 +285,8 @@ EOCONF
     openssh-client \
     openssh-server \
     pssh \
+    python3-all \
+    python3-arrow \
     rsyslog \
     rsyslog-gnutls \
     software-properties-common \
