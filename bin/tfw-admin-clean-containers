@@ -187,6 +187,8 @@ class DockerContainerCleaner:
         ])
 
     def _fetch_full_containers(self, cids):
+        if len(cids) == 0:
+            return []
         return [
             DockerContainer.from_json(json.loads(line))
             for line in self._check_output([
