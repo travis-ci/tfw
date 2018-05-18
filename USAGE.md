@@ -2,7 +2,7 @@
 
 ## tfw help admin-bootstrap
 
-``` bash
+```
 Usage: tfw admin-bootstrap 
 
 Run multiple admin-* tasks, attempting to fetch configuration from
@@ -26,7 +26,7 @@ ${ETCDIR}/default/github-users
 
 ## tfw help admin-docker-volume-setup
 
-``` bash
+```
 Usage: tfw admin-docker-volume-setup [device] [metadata-size] [dm-basesize] [debug]
 
 Ensure a direct-lvm volume is present for use with the Docker storage backend,
@@ -37,7 +37,7 @@ is detected, the {metadata-size} is 2G, and the {dm-basesize} is 19G.
 
 ## tfw help admin-duo
 
-``` bash
+```
 Usage: tfw admin-duo [duo-conf]
 
 If a configuration file is present at [duo-conf] (default /var/tmp/duo.conf),
@@ -48,7 +48,7 @@ that are members of the 'sudo' group will also be added to the 'duo' group.
 
 ## tfw help admin-hostname
 
-``` bash
+```
 Usage: tfw admin-hostname [hostname-template]
 
 Set system hostname and add /etc/hosts record based on runtime values and
@@ -58,7 +58,7 @@ optional {hostname-template} (default=${RUNDIR}/instance-hostname.tmpl).
 
 ## tfw help admin-librato
 
-``` bash
+```
 Usage: tfw admin-librato 
 
 If both ${LIBRATO_EMAIL} and ${LIBRATO_TOKEN} are defined, either in the
@@ -69,7 +69,7 @@ collectd APT source is available, install collectd, and configure accordingly.
 
 ## tfw help admin-raid
 
-``` bash
+```
 Usage: tfw admin-raid [device] [raid-level]
 
 Set up a multi-disk volume at [device] (default detected) with raid level
@@ -80,7 +80,7 @@ all available /dev/sd* devices.
 
 ## tfw help admin-rsyslog
 
-``` bash
+```
 Usage: tfw admin-rsyslog [syslog-address]
 
 Ensure rsyslog forwarding is enabled if a [syslog-address] is available, reading
@@ -90,7 +90,7 @@ from ${RUNDIR}/syslog-address by default.
 
 ## tfw help admin-run-docker
 
-``` bash
+```
 Usage: tfw admin-run-docker 
 
 Run dockerd in the foreground after reading the necessary configuration bits and
@@ -100,7 +100,7 @@ potentially running admin-docker-volume-setup.
 
 ## tfw help admin-ssh
 
-``` bash
+```
 Usage: tfw admin-ssh [ssh-maxretry] [ssh-bantime] [keyalgo:bits, keyalgo:bits, ...]
 
 Enable and configure SSH server keys and fail2ban SSH jail.
@@ -109,7 +109,7 @@ Enable and configure SSH server keys and fail2ban SSH jail.
 
 ## tfw help admin-travis-sudo
 
-``` bash
+```
 Usage: tfw admin-travis-sudo 
 
 Disable sudo access for travis user if it exists.
@@ -118,7 +118,7 @@ Disable sudo access for travis user if it exists.
 
 ## tfw help admin-users
 
-``` bash
+```
 Usage: tfw admin-users <username:github-login> [username:github-login, ]
 
 Ensure local users exist with SSH authorized keys added from GitHub.
@@ -127,7 +127,7 @@ Ensure local users exist with SSH authorized keys added from GitHub.
 
 ## tfw help app-extract
 
-``` bash
+```
 Usage: tfw app-extract <name> <image>
 
 Extract systemd service definition and wrapper script, if present, from a given
@@ -142,7 +142,7 @@ NOTE: ${USRSBINDIR} is used as prefix for ${USRSBINDIR}/${name}-wrapper
 
 ## tfw help app-printenv
 
-``` bash
+```
 Usage: tfw app-printenv <name> [outfile] [-E/--export]
 
 Print the combined configuration for a given thing by name, optionally writing
@@ -154,7 +154,7 @@ NOTE: ${ETCDIR} is used as prefix for ${ETCDIR}/default/
 
 ## tfw help app-writeenv
 
-``` bash
+```
 Usage: tfw app-writeenv <name> [dest-basename]
 
 Write the combined configuration for a given thing by name to ${RUNDIR}/,
@@ -165,7 +165,7 @@ NOTE: ${ETCDIR} is used as prefix for ${ETCDIR}/default/NOTE: ${RUNDIR} is used 
 
 ## tfw help bootstrap
 
-``` bash
+```
 Usage: tfw bootstrap 
 Ensure dependencies are present on the system; intended to be run early in
 instance preparation.
@@ -178,7 +178,7 @@ NOTE: ${USRBINDIR} is used as prefix installed executables
 
 ## tfw help gsub
 
-``` bash
+```
 Usage: tfw gsub <name> <infile> [outfile]
 
 Substitute strings with platform and instance-dependent runtime values,
@@ -194,7 +194,7 @@ optionally writing to an output file.
 
 ## tfw help help
 
-``` bash
+```
 Usage: tfw help [topic] [exit-code]
 
 Get more help about a topic, optionally injecting an exit code (mostly used
@@ -203,7 +203,7 @@ internally).
 
 ## tfw help list-internal-commands
 
-``` bash
+```
 Usage: tfw list-internal-commands 
 
 List internal commands and exit 0 (used by usage documentation generation).
@@ -212,7 +212,7 @@ List internal commands and exit 0 (used by usage documentation generation).
 
 ## tfw help urldecode
 
-``` bash
+```
 Usage: tfw urldecode <url-encoded-string> [url-encoded-string, ...]
 
 URL-decode any number of positional argument strings, handling 'quote plus'
@@ -223,7 +223,7 @@ encoding as well, e.g.
 
 ## tfw help version
 
-``` bash
+```
 Usage: tfw version 
 
 Print the version and exit 0, and that's about it!
