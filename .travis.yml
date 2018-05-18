@@ -1,11 +1,14 @@
-language: bash
+language: python
+python:
+- 3.5.2
+- 3.6.5
 services:
 - docker
 cache:
   directories:
   - "${HOME}/bin"
 install:
-- make ensure-checkmake ensure-shellcheck ensure-shfmt
+- make deps
 script:
 - make lint
 - git diff --exit-code

@@ -15,11 +15,16 @@ clean:
 test:
 	bats $(wildcard *.bats)
 
+.PHONY: deps
+deps: ensure-checkmake ensure-shellcheck ensure-shfmt
+	pip install -r requirements.txt
+
 .PHONY: lint
 lint:
 	checkmake Makefile &>/dev/null
 	shfmt -f . | xargs shellcheck
 	shfmt -i 2 -w .
+	yapf -i -r -vv libexec/
 
 .PHONY: ensure-checkmake
 ensure-checkmake:
