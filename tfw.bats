@@ -52,14 +52,14 @@ teardown() {
 
 @test "tfw -h/--help/help/h exits 0" {
   for word in '-h' '--help' 'help' 'h'; do
-    run ./tfw "${word}"
+    run ./bin/tfw "${word}"
     [[ "${status}" -eq 0 ]]
   done
 }
 
 @test "tfw help urldecode/d shows help" {
   for word in 'urldecode' 'd'; do
-    run ./tfw help "${word}"
+    run ./bin/tfw help "${word}"
     [[ "${output}" =~ Usage: ]]
     [[ "${status}" -eq 0 ]]
   done
@@ -67,7 +67,7 @@ teardown() {
 
 @test "tfw urldecode/d decodes stuff and exits 0" {
   for word in 'urldecode' 'd'; do
-    run ./tfw "${word}" 'what%2Fthe+what%3F'
+    run ./bin/tfw "${word}" 'what%2Fthe+what%3F'
     [[ "${output}" == "what/the what?" ]]
     [[ "${status}" -eq 0 ]]
   done
@@ -75,7 +75,7 @@ teardown() {
 
 @test "tfw help app-printenv/printenv/p shows help" {
   for word in 'app-printenv' 'printenv' 'p'; do
-    run ./tfw help "${word}"
+    run ./bin/tfw help "${word}"
     [[ "${output}" =~ Usage: ]]
     [[ "${status}" -eq 0 ]]
   done
@@ -83,14 +83,14 @@ teardown() {
 
 @test "tfw app-printenv/printenv/p without args exits 2" {
   for word in 'app-printenv' 'printenv' 'p'; do
-    run ./tfw "${word}"
+    run ./bin/tfw "${word}"
     [[ "${status}" -eq 2 ]]
   done
 }
 
 @test "tfw app-printenv/printenv/p tfwtest prints stuff and exits 0" {
   for word in 'app-printenv' 'printenv' 'p'; do
-    run ./tfw "${word}" tfwtest
+    run ./bin/tfw "${word}" tfwtest
     [[ ! "${output}" =~ export ]]
     eval "${output}"
     [[ "${status}" -eq 0 ]]
@@ -100,7 +100,7 @@ teardown() {
 
 @test "tfw app-printenv/printenv/p tfwtest --export prints stuff and exits 0" {
   for word in 'app-printenv' 'printenv' 'p'; do
-    run ./tfw "${word}" tfwtest '' --export
+    run ./bin/tfw "${word}" tfwtest '' --export
     [[ "${output}" =~ export ]]
     eval "${output}"
     [[ "${status}" -eq 0 ]]
@@ -110,7 +110,7 @@ teardown() {
 
 @test "tfw app-printenv/printenv/p notset prints stuff and exits 0" {
   for word in 'app-printenv' 'printenv' 'p'; do
-    run ./tfw "${word}" notset
+    run ./bin/tfw "${word}" notset
     eval "${output}"
     [[ "${status}" -eq 0 ]]
     [[ "${TFW_BOOPS}" == 8999 ]]
@@ -119,7 +119,7 @@ teardown() {
 
 @test "tfw help app-writeenv/writeenv/w shows help" {
   for word in 'app-writeenv' 'writeenv' 'w'; do
-    run ./tfw help "${word}"
+    run ./bin/tfw help "${word}"
     [[ "${output}" =~ Usage: ]]
     [[ "${status}" -eq 0 ]]
   done
@@ -127,14 +127,14 @@ teardown() {
 
 @test "tfw app-writeenv/writeenv/w without args exits 2" {
   for word in 'app-writeenv' 'writeenv' 'w'; do
-    run ./tfw "${word}"
+    run ./bin/tfw "${word}"
     [[ "${status}" -eq 2 ]]
   done
 }
 
 @test "tfw app-writeenv/writeenv/w tfwtest writes stuff and exits 0" {
   for word in 'app-writeenv' 'writeenv' 'w'; do
-    run ./tfw "${word}" tfwtest
+    run ./bin/tfw "${word}" tfwtest
     source "${RUNDIR}/tfwtest.env"
     [[ "${status}" -eq 0 ]]
     [[ "${TFW_BOOPS}" == 9003 ]]
@@ -143,7 +143,7 @@ teardown() {
 
 @test "tfw app-writeenv/writeenv/w tfwtest tfwtest-1 writes stuff and exits 0" {
   for word in 'app-writeenv' 'writeenv' 'w'; do
-    run ./tfw "${word}" tfwtest tfwtest-1
+    run ./bin/tfw "${word}" tfwtest tfwtest-1
     source "${RUNDIR}/tfwtest-1.env"
     [[ "${status}" -eq 0 ]]
     [[ "${TFW_BOOPS}" == 9003 ]]
@@ -152,7 +152,7 @@ teardown() {
 
 @test "tfw help app-extract/extract/e shows help" {
   for word in 'app-extract' 'extract' 'e'; do
-    run ./tfw help "${word}"
+    run ./bin/tfw help "${word}"
     [[ "${output}" =~ Usage: ]]
     [[ "${status}" -eq 0 ]]
   done
@@ -160,21 +160,21 @@ teardown() {
 
 @test "tfw app-extract/extract/e without args exits 2" {
   for word in 'app-extract' 'extract' 'e'; do
-    run ./tfw "${word}"
+    run ./bin/tfw "${word}"
     [[ "${status}" -eq 2 ]]
   done
 }
 
 @test "tfw app-extract/extract/e tfwtest exits 2" {
   for word in 'app-extract' 'extract' 'e'; do
-    run ./tfw "${word}" tfwtest
+    run ./bin/tfw "${word}" tfwtest
     [[ "${status}" -eq 2 ]]
   done
 }
 
 @test "tfw app-extract/extract/e tfwtest <image> extracts stuff and exits 0" {
   for word in 'app-extract' 'extract' 'e'; do
-    run ./tfw "${word}" tfwtest "${TFWTEST_IMAGE}"
+    run ./bin/tfw "${word}" tfwtest "${TFWTEST_IMAGE}"
     [[ "${status}" -eq 0 ]]
     [[ -r "${ETCDIR}/systemd/system/tfwtest.service" ]]
     [[ -x "${USRSBINDIR}/tfwtest-wrapper" ]]

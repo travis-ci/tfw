@@ -11,6 +11,8 @@ install:
 - make deps
 script:
 - make lint
+- touch bin/tfw
+- make USAGE.md
 - git diff --exit-code
 - git diff --cached --exit-code
 - make test
