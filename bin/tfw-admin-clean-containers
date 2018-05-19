@@ -40,8 +40,8 @@ def _build_logger_and_cleaner(args):
     logging_kwargs = dict(
         level=logging.INFO,
         style='{',
-        format='{name}:{asctime}:{levelname}:{message}',
-        datefmt='%Y-%m-%dT%H:%M:%S')
+        format='{asctime}:{levelname}:{message}',
+        datefmt='%Y%m%dT%H%M%S')
 
     if args.debug:
         logging_kwargs['level'] = logging.DEBUG
@@ -57,6 +57,7 @@ def _build_logger_and_cleaner(args):
 
 def _build_argument_parser(env):
     parser = argparse.ArgumentParser(
+        prog='tfw admin-clean-containers',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
         '-O',
