@@ -304,6 +304,7 @@ EOCONF
     pssh \
     python3-all \
     python3-arrow \
+    python3-psutil \
     rsyslog \
     rsyslog-gnutls \
     software-properties-common \

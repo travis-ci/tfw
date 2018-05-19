@@ -8,6 +8,7 @@ import sys
 import time
 
 import arrow
+import psutil
 
 
 def main(argv=sys.argv[:], env=os.environ):
@@ -117,9 +118,9 @@ class DockerContainerCleaner:
     _full_container_format = ''.join("""
         {
             "ExecIDs": {{.ExecIDs|json}},
-            "ID": {{.ID|json}},
-            "Name": {{.Name|json}},
-            "StartedAt": {{.State.StartedAt|json}}
+            "Id": "{{.Id}}",
+            "Name": "{{.Name}}",
+            "State": {{.State|json}}
         }
     """.split())
 
@@ -152,16 +153,24 @@ class DockerContainerCleaner:
 
         for container in containers:
             if self._container_must_be_cleaned(container, max_age):
-                self._logger.info('%s must be cleaned; removing! (name=%s)',
-                                  container.id, container.name)
+                try:
+                    self._logger.info(
+                        '%s must be cleaned; removing! (name=%s)',
+                        container.id, container.name)
 
-                self._docker_try_for_container(['kill'], 'kill', container)
-                self._docker_try_for_container(['stop'], 'stop', container)
-                self._docker_try_for_container(['rm', '--force'], 'remove',
-                                               container)
+                    self._try_kill_container_shim(container.shim)
+                    self._docker_try_for_container(['kill'], 'kill', container)
+                    self._docker_try_for_container(['stop'], 'stop', container)
+                    self._docker_try_for_container(['rm', '--force'], 'remove',
+                                                   container)
 
-                result['cleaned_count'] += 1
-                result['status'] = 'cleaned'
+                    result['cleaned_count'] += 1
+                    result['status'] = 'cleaned'
+                except (OSError, subprocess.SubprocessError,
+                        psutil.Error) as exc:
+                    self._logger.warning(
+                        'failed to clean container cid=%s name=%s err=%s',
+                        container.id, container.name, exc)
             else:
                 self._logger.debug(
                     'not cleaning cid=%s name=%s age_seconds=%s', container.id,
@@ -181,27 +190,61 @@ class DockerContainerCleaner:
     def _fetch_travis_job_containers(self):
         return self._fetch_full_containers([
             cid.strip() for cid in self._check_output([
-                self._docker_exe, 'ps', '--all', '--quiet', '--filter',
-                'name=travis-job-*'
+                self._docker_exe, 'ps', '--all', '--quiet', '--no-trunc',
+                '--filter', 'name=travis-job-*'
             ]).split()
         ])
 
     def _fetch_full_containers(self, cids):
         if len(cids) == 0:
             return []
-        return [
-            DockerContainer.from_json(json.loads(line))
-            for line in self._check_output([
-                self._docker_exe, 'inspect', '--format',
-                self._full_container_format
-            ] + cids).splitlines()
-        ]
+
+        ret = []
+        for cid in cids:
+            try:
+                container = self._fetch_full_container(cid)
+                ret.append(container)
+            except (OSError, subprocess.SubprocessError) as exc:
+                ret.append(
+                    DockerContainer.from_dict({
+                        'Err': exc,
+                        'Id': cid,
+                        'Shim': self._fetch_shim(cid)
+                    }))
+
+        return ret
+
+    def _fetch_full_container(self, cid):
+        return DockerContainer.from_dict(
+            json.loads(
+                self._check_output([
+                    self._docker_exe, 'inspect', '--format',
+                    self._full_container_format, cid
+                ]).strip()))
+
+    def _fetch_shim(self, cid):
+        shims = []
+        for proc in psutil.process_iter():
+            if proc.name() == 'docker-containerd-shim':
+                shims.append(proc)
+
+        for shim in shims:
+            cmdline = shim.cmdline()
+            for i, arg in enumerate(cmdline):
+                if arg == '-workdir' \
+                    and cmdline[i+1].endswith('/{}'.format(cid)):
+                    return shim
+        return None
 
     def _container_must_be_cleaned(self, container, max_age):
+        if container.err is not None:
+            return True
+
         if not self._container_has_active_exec(container):
             self._logger.debug('no active exec for container name=%s',
                                container.name)
             return True
+
         if not self._container_is_newer_than(container.started_at, max_age):
             self._logger.debug('container age_seconds=%s over max=%s',
                                (arrow.utcnow() - container.started_at).seconds,
@@ -215,6 +258,16 @@ class DockerContainerCleaner:
 
     def _container_is_newer_than(self, started_at, max_age):
         return (arrow.utcnow() - started_at).seconds < max_age
+
+    def _try_kill_container_shim(self, container_shim):
+        if container_shim is None:
+            return
+        try:
+            self._logger.debug('trying to kill container shim pid=%s',
+                               container_shim.pid)
+            container_shim.kill()
+        except psutil.Error as exc:
+            self._logger.warning('failed to kill container shim err=%s', exc)
 
     def _docker_try_for_container(self, op, desc, container):
         try:
@@ -235,20 +288,33 @@ class DockerContainerCleaner:
 
 class DockerContainer:
     def __init__(self):
+        self.err = None
         self.exec_ids = None
         self.id = ''
+        self.is_running = False
         self.name = ''
+        self.pid = -1
+        self.shim = None
         self.started_at = arrow.utcnow()
 
     @classmethod
-    def from_json(cls, container_json):
+    def from_dict(cls, container_dict):
         inst = cls()
-        inst.exec_ids = container_json.get('ExecIDs', None)
-        inst.id = container_json.get('ID', '')
-        inst.name = container_json.get('Name', '')
-        started_at = container_json.get('StartedAt', None)
+        inst.err = container_dict.get('Err', None)
+        inst.exec_ids = container_dict.get('ExecIDs', None)
+        inst.id = container_dict.get('Id', '')
+        inst.is_running = container_dict.get('State', {}).get('Running', False)
+        inst.name = container_dict.get('Name', '')
+        inst.pid = container_dict.get('State', {}).get('Pid', -1)
+        inst.shim = container_dict.get('Shim', None)
+
+        started_at = container_dict.get('State', {}).get('StartedAt', None)
         if started_at is not None:
             inst.started_at = arrow.get(started_at)
+
+        if inst.shim is None and inst.pid > 0:
+            inst.shim = psutil.Process(inst.pid).parent()
+
         return inst
 
 
