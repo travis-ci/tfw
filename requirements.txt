@@ -1,3 +1,7 @@
-arrow
+# dependency versions available on xenial
+arrow==0.7.0
+psutil==3.4.2
+
+# test & development dependencies
 flake8
 yapf
