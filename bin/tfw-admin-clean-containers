@@ -115,15 +115,6 @@ def _asbool(s):
 
 
 class DockerContainerCleaner:
-    _full_container_format = ''.join("""
-        {
-            "ExecIDs": {{.ExecIDs|json}},
-            "Id": "{{.Id}}",
-            "Name": "{{.Name}}",
-            "State": {{.State|json}}
-        }
-    """.split())
-
     def __init__(self,
                  logger=None,
                  tfw_exe='tfw',
@@ -218,8 +209,7 @@ class DockerContainerCleaner:
         return DockerContainer.from_dict(
             json.loads(
                 self._check_output([
-                    self._docker_exe, 'inspect', '--format',
-                    self._full_container_format, cid
+                    self._docker_exe, 'inspect', '--format', '{{.|json}}', cid
                 ]).strip()))
 
     def _fetch_shim(self, cid):
