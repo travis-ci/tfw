@@ -338,6 +338,8 @@ EOLINK
 [Service]
 ExecStart=
 ExecStart=${full_tfw} admin-run-docker
+SyslogIdentifier=
+SyslogIdentifier=dockerd
 EOCONF
   chmod 0644 "${override_conf}"
   chown -R root:root "$(dirname "${override_conf}")"
