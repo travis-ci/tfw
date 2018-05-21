@@ -23,8 +23,8 @@ deps: ensure-checkmake ensure-shellcheck ensure-shfmt
 .PHONY: lint
 lint:
 	checkmake Makefile &>/dev/null
-	shfmt -f . | xargs shellcheck
-	shfmt -i 2 -w .
+	shfmt -f bin/ | xargs shellcheck
+	shfmt -i 2 -w bin/
 	yapf -i -r -vv bin/
 
 .PHONY: ensure-checkmake

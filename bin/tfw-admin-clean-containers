@@ -2,6 +2,7 @@
 import argparse
 import json
 import logging
+import logging.config
 import os
 import subprocess
 import sys
@@ -16,39 +17,73 @@ def main(argv=sys.argv[:], env=os.environ):
     args = parser.parse_args(argv[1:])
     logger, cleaner = _build_logger_and_cleaner(args)
 
-    logger.debug('entering loop with args=%r', dict(args.__dict__))
+    logger.debug('entering loop', dict(args=args.__dict__))
     while True:
         try:
             cleaner.clean(max_age=args.max_age)
             if args.once:
                 return 0
-            logger.info('sleeping interval=%s', args.sleep_interval)
+            logger.info('sleeping', dict(interval=args.sleep_interval))
             time.sleep(args.sleep_interval)
         except KeyboardInterrupt:
             return 0
         except (OSError, subprocess.SubprocessError) as exc:
-            logger.warning('failed to run due to err=%s', exc)
+            logger.warning('failed to run', dict(err=exc))
             if args.once:
                 return 1
-            logger.info('sleeping interval=%s', args.sleep_interval)
+            logger.info('sleeping', dict(interval=args.sleep_interval))
             time.sleep(args.sleep_interval)
 
     return 1
 
 
+class L2metFormatter(logging.Formatter):
+    _l2met_fmt = 'time={now} level={level} msg={msg}{kwargs}'
+
+    def format(self, record):
+        rec = {}
+        rec.update(record.__dict__)
+        rec.update(
+            now=arrow.get(record.created).isoformat(),
+            level=record.levelname.lower(),
+            kwargs='')
+        if hasattr(record.args, 'items'):
+            kwargs_list = []
+            for key, value in sorted(record.args.items()):
+                kwargs_list.append('{}={!r}'.format(key, value))
+            if len(kwargs_list) > 0:
+                rec.update(kwargs=' ' + (' '.join(kwargs_list)))
+
+        return self._l2met_fmt.format(**rec)
+
+
+def _l2met_formatter_factory(*args, **kwargs):
+    return L2metFormatter(*args, **kwargs)
+
+
 def _build_logger_and_cleaner(args):
-    logging_kwargs = dict(
-        level=logging.INFO,
-        style='{',
-        format='{asctime}:{levelname}:{message}',
-        datefmt='%Y%m%dT%H%M%S')
+    logging.config.dictConfig({
+        'version': 1,
+        'formatters': {
+            'l2met': {
+                '()': _l2met_formatter_factory
+            }
+        },
+        'handlers': {
+            'stdout': {
+                'class': 'logging.StreamHandler',
+                'formatter': 'l2met'
+            }
+        },
+        'loggers': {
+            __name__: {
+                'level': ('DEBUG' if args.debug else 'INFO'),
+                'handlers': ['stdout']
+            }
+        }
+    })
 
-    if args.debug:
-        logging_kwargs['level'] = logging.DEBUG
-
-    logging.basicConfig(**logging_kwargs)
-
-    logger = logging.getLogger(__file__)
+    logger = logging.getLogger(__name__)
     cleaner = DockerContainerCleaner(
         logger=logger, tfw_exe=args.tfw_exe, docker_exe=args.docker_exe)
 
@@ -131,13 +166,13 @@ class DockerContainerCleaner:
 
     def clean(self, max_age=7200):
         max_age = self._calc_max_age(max_age)
-        self._logger.debug('using max age=%s', max_age)
+        self._logger.debug('using', dict(max_age=max_age))
         result = dict(not_cleaned_count=0, cleaned_count=0, status='noop')
 
         self._logger.debug('fetching travis job containers')
         containers = self._fetch_travis_job_containers()
-        self._logger.debug('fetched travis job containers len=%s',
-                           len(containers))
+        self._logger.debug(
+            'fetched travis job containers', dict(length=len(containers)))
 
         if len(containers) == 0:
             self._logger.warning('no travis job containers running, aborting')
@@ -147,8 +182,12 @@ class DockerContainerCleaner:
             if self._container_must_be_cleaned(container, max_age):
                 try:
                     self._logger.info(
-                        '%s must be cleaned; removing! (name=%s)',
-                        container.id, container.name)
+                        'container must be cleaned; removing',
+                        dict(
+                            cid=container.id,
+                            name=container.name,
+                            age_seconds=container.age.seconds,
+                        ))
 
                     self._try_kill_container_shim(container.shim)
                     self._docker_try_for_container(['kill'], 'kill', container)
@@ -161,13 +200,15 @@ class DockerContainerCleaner:
                 except (OSError, subprocess.SubprocessError,
                         psutil.Error) as exc:
                     self._logger.warning(
-                        'failed to clean container cid=%s name=%s err=%s',
-                        container.id, container.name, exc)
+                        'failed to clean',
+                        dict(cid=container.id, name=container.name, err=exc))
             else:
                 self._logger.debug(
-                    'not cleaning cid=%s name=%s age_seconds=%s', container.id,
-                    container.name,
-                    (arrow.utcnow() - container.started_at).seconds)
+                    'not cleaning',
+                    dict(
+                        cid=container.id,
+                        name=container.name,
+                        age_seconds=container.age.seconds))
                 result['not_cleaned_count'] += 1
 
         self._report_cleanup_stats(result)
@@ -232,14 +273,14 @@ class DockerContainerCleaner:
             return True
 
         if not self._container_has_active_exec(container):
-            self._logger.debug('no active exec for container name=%s',
-                               container.name)
+            self._logger.debug(
+                'no active exec for container', dict(name=container.name))
             return True
 
         if not self._container_is_newer_than(container.started_at, max_age):
-            self._logger.debug('container age_seconds=%s over max=%s',
-                               (arrow.utcnow() - container.started_at).seconds,
-                               max_age)
+            self._logger.debug(
+                'container overage',
+                dict(age_seconds=container.age.seconds, max=max_age))
             return True
         return False
 
@@ -254,18 +295,19 @@ class DockerContainerCleaner:
         if container_shim is None:
             return
         try:
-            self._logger.debug('trying to kill container shim pid=%s',
-                               container_shim.pid)
+            self._logger.debug(
+                'trying to kill container shim', dict(pid=container_shim.pid))
             container_shim.kill()
         except psutil.Error as exc:
-            self._logger.warning('failed to kill container shim err=%s', exc)
+            self._logger.warning(
+                'failed to kill container shim', dict(err=exc))
 
     def _docker_try_for_container(self, op, desc, container):
         try:
             self._check_output([self._docker_exe] + op + [container.id])
         except (OSError, subprocess.SubprocessError) as exc:
-            self._logger.warning('failed to %s container name=%s err=%s', desc,
-                                 container.name, exc)
+            self._logger.warning('op failed',
+                                 dict(op=desc, name=container.name, err=exc))
 
     def _report_cleanup_stats(self, result):
         # TODO: implementation!
@@ -273,7 +315,7 @@ class DockerContainerCleaner:
 
     def _check_output(self, command, **popen_args):
         popen_args.setdefault('timeout', self._subprocess_timeout)
-        self._logger.debug('running command=%r', (command, ))
+        self._logger.debug('running', dict(command=' '.join(command)))
         return subprocess.check_output(command, **popen_args).decode('utf-8')
 
 
@@ -307,6 +349,10 @@ class DockerContainer:
             inst.shim = psutil.Process(inst.pid).parent()
 
         return inst
+
+    @property
+    def age(self):
+        return arrow.utcnow() - self.started_at
 
 
 if __name__ == '__main__':
