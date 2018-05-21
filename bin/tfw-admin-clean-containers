@@ -38,7 +38,7 @@ def main(argv=sys.argv[:], env=os.environ):
 
 
 class L2metFormatter(logging.Formatter):
-    _l2met_fmt = 'time={now} level={level} msg={msg}{kwargs}'
+    _l2met_fmt = 'time={now} level={level} msg={msg!r}{kwargs}'
 
     def format(self, record):
         rec = {}
