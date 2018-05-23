@@ -211,7 +211,7 @@ class DockerContainerCleaner:
                         age_seconds=container.age.seconds))
                 result['not_cleaned_count'] += 1
 
-        self._report_cleanup_stats(result)
+        self._logger.info('done cleaning', result)
 
     def _calc_max_age(self, max_age):
         raw_ts = self._check_output([
@@ -308,10 +308,6 @@ class DockerContainerCleaner:
         except (OSError, subprocess.SubprocessError) as exc:
             self._logger.warning('op failed',
                                  dict(op=desc, name=container.name, err=exc))
-
-    def _report_cleanup_stats(self, result):
-        # TODO: implementation!
-        pass
 
     def _check_output(self, command, **popen_args):
         popen_args.setdefault('timeout', self._subprocess_timeout)
