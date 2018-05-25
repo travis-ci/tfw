@@ -5,6 +5,8 @@ PREFIX ?= /usr/local
 SHELLCHECK_URL := https://www.googleapis.com/download/storage/v1/b/shellcheck/o/shellcheck-v0.4.7.linux.x86_64.tar.xz?alt=media
 SHFMT_URL := https://github.com/mvdan/sh/releases/download/v2.2.0/shfmt_v2.2.0_linux_amd64
 
+TOP := $(shell git rev-parse --show-toplevel)
+
 .PHONY: all
 all: test
 
@@ -15,6 +17,11 @@ clean:
 .PHONY: test
 test:
 	bats $(wildcard *.bats)
+
+.PHONY: systest
+systest: .assert-ci
+	$(TOP)/bin/tfw bootstrap
+	$(TOP)/bin/tfw admin-bootstrap
 
 .PHONY: deps
 deps: ensure-checkmake ensure-shellcheck ensure-shfmt
@@ -65,3 +72,10 @@ USAGE.md: bin/tfw
 .PHONY: install
 install:
 	install -D -m 0755 -t $(PREFIX)/bin $(wildcard bin/*)
+
+.PHONY: .assert-ci
+.assert-ci:
+	@[[ "$(TRAVIS)" && "$(CI)" ]] || { \
+		echo 'ERROR: $$TRAVIS and $$CI not detected!'; \
+		exit 1; \
+	}

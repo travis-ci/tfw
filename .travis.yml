@@ -16,3 +16,4 @@ script:
 - git diff --exit-code
 - git diff --cached --exit-code
 - make test
+- make systest
