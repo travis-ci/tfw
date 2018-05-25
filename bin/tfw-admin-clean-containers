@@ -18,22 +18,27 @@ def main(argv=sys.argv[:], env=os.environ):
     logger, cleaner = _build_logger_and_cleaner(args)
 
     logger.debug('entering loop', dict(args=args.__dict__))
+
     while True:
+        retcode = 0
+
         try:
             cleaner.clean(max_age=args.max_age)
-            if args.once:
-                return 0
-            logger.info('sleeping', dict(interval=args.sleep_interval))
-            time.sleep(args.sleep_interval)
         except KeyboardInterrupt:
             return 0
-        except (OSError, subprocess.SubprocessError) as exc:
-            logger.warning('failed to run', dict(err=exc))
-            if args.once:
-                return 1
-            logger.info('sleeping', dict(interval=args.sleep_interval))
-            time.sleep(args.sleep_interval)
+        except OSError as oserr:
+            logger.warning('failed to run', dict(err=oserr))
+            retcode = 2
+        except subprocess.SubprocessError as sperr:
+            logger.warning('failed to run', dict(
+                err=sperr, stderr=sperr.stderr))
+            retcode = 1
 
+        if args.once:
+            return retcode
+
+        logger.info('sleeping', dict(interval=args.sleep_interval))
+        time.sleep(args.sleep_interval)
     return 1
 
 
@@ -199,9 +204,11 @@ class DockerContainerCleaner:
                     result['status'] = 'cleaned'
                 except (OSError, subprocess.SubprocessError,
                         psutil.Error) as exc:
-                    self._logger.warning(
-                        'failed to clean',
-                        dict(cid=container.id, name=container.name, err=exc))
+                    warndict = dict(
+                        cid=container.id, name=container.name, err=exc)
+                    if hasattr(exc, 'stderr'):
+                        warndict['stderr'] = exc.stderr
+                    self._logger.warning('failed to clean', warndict)
             else:
                 self._logger.debug(
                     'not cleaning',
@@ -306,13 +313,21 @@ class DockerContainerCleaner:
         try:
             self._check_output([self._docker_exe] + op + [container.id])
         except (OSError, subprocess.SubprocessError) as exc:
-            self._logger.warning('op failed',
-                                 dict(op=desc, name=container.name, err=exc))
+            warndict = dict(op=desc, name=container.name, err=exc)
+            if hasattr(exc, 'stderr'):
+                warndict['stderr'] = exc.stderr
+            self._logger.warning('op failed', warndict)
 
     def _check_output(self, command, **popen_args):
         popen_args.setdefault('timeout', self._subprocess_timeout)
+        popen_args.setdefault('stdout', subprocess.PIPE)
+        popen_args.setdefault('stderr', subprocess.PIPE)
+        popen_args.setdefault('check', True)
+        popen_args.setdefault('encoding', 'utf-8')
+
         self._logger.debug('running', dict(command=' '.join(command)))
-        return subprocess.check_output(command, **popen_args).decode('utf-8')
+
+        return subprocess.run(command, **popen_args).stdout
 
 
 class DockerContainer:
