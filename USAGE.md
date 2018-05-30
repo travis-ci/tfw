@@ -116,6 +116,16 @@ Disable sudo access for travis user if it exists.
 
 ```
 
+## tfw help admin-upgrade-kernel
+
+```
+Usage: tfw admin-upgrade-kernel [kernel-version] [signing-key]
+
+Upgrade the kernel to {kernel-version} (default ) from
+kernel.ubuntu.com/~kernel-ppa/mainline, taking effect at next boot.
+
+```
+
 ## tfw help admin-users
 
 ```

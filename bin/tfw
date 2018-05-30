@@ -43,6 +43,7 @@ __TFW_DEPENDENCIES__=(
 )
 
 main() {
+  : "${DEFAULT_KERNEL_VERSION:=4.16.11}"
   : "${DEVDIR:=/dev}"
   : "${DIST:=$(lsb_release -sc)}"
   : "${ETCDIR:=/etc}"
@@ -55,8 +56,8 @@ main() {
   : "${VARLIBDIR:=/var/lib}"
   : "${VARTMPDIR:=/var/tmp}"
 
-  export DEVDIR DIST ETCDIR OPTDIR RUNDIR TMPDIR USRBINDIR USRSBINDIR \
-    VARCACHEDIR VARLIBDIR VARTMPDIR
+  export DEFAULT_KERNEL_VERSION DEVDIR DIST ETCDIR OPTDIR RUNDIR TMPDIR \
+    USRBINDIR USRSBINDIR VARCACHEDIR VARLIBDIR VARTMPDIR
 
   local here_dir
   here_dir="$(dirname "${BASH_SOURCE[0]}")"
@@ -166,6 +167,7 @@ Administrivia:
   admin-run-docker
   admin-ssh
   admin-travis-sudo
+  admin-upgrade-kernel
   admin-users
 
 EOUSAGE
@@ -241,8 +243,8 @@ __run_bootstrap() {
   chown root:root "${TMPDIR}" "${VARTMPDIR}"
   chmod 0777 "${TMPDIR}" "${VARTMPDIR}"
 
-  __bootstrap_jq
   __bootstrap_apt
+  __bootstrap_jq
   __bootstrap_docker
   __bootstrap_sudo
   __bootstrap_instance_metadata
@@ -748,6 +750,7 @@ __run_admin-bootstrap() {
   __run_admin-rsyslog "${TFW_SYSLOG_ADDRESS}"
   __run_admin-duo "${TFW_DUO_CONF}"
   __run_admin-librato
+  __run_admin-upgrade-kernel "${TFW_KERNEL_VERSION}"
 }
 
 def admin-users "<username:github-login> [username:github-login, ]
@@ -1302,6 +1305,130 @@ __ensure_direct_lvm_setup() {
   lvcreate -n data direct-lvm -l '100%FREE'
   dd if=/dev/zero of=/dev/direct-lvm/data bs=1M count=10
   return 0
+}
+
+def admin-upgrade-kernel "[kernel-version] [signing-key]
+
+Upgrade the kernel to {kernel-version} (default ${DEFAULT_KERNEL_VERSION}) from
+kernel.ubuntu.com/~kernel-ppa/mainline, taking effect at next boot.
+"
+__run_admin-upgrade-kernel() {
+  local kv="${1:-${DEFAULT_KERNEL_VERSION}}"
+  local signing_key="${2:-60AA7B6F30434AE68E569963E50C6A0917C622B0}"
+  local url_prefix='http://kernel.ubuntu.com/~kernel-ppa/mainline'
+  local re_prefix='[0-9a-f]{64}  linux'
+  local image_suffix="[0-9]{6}-generic_${kv}-[0-9]{6}\\.[0-9]{12}_amd64\\.deb\$"
+  local modules_path image_path headers_path generic_headers_path
+
+  export DEBIAN_FRONTEND=noninteractive
+
+  apt-get update -yq
+  apt-get install -yq curl
+
+  curl -sSL -o "${TMPDIR}/libssl1.1.deb" \
+    "http://mirrors.kernel.org/ubuntu/pool/main/o/openssl/libssl1.1_1.1.0g-2ubuntu4_amd64.deb"
+  dpkg -i "${TMPDIR}/libssl1.1.deb"
+
+  curl -sSL -o "${TMPDIR}/linux-base.deb" \
+    "http://mirrors.kernel.org/ubuntu/pool/main/l/linux-base/linux-base_4.5ubuntu1_all.deb"
+  dpkg -i "${TMPDIR}/linux-base.deb"
+
+  gpg --keyserver hkp://ha.pool.sks-keyservers.net --recv-key "${signing_key}"
+  curl -sSL -o "${TMPDIR}/CHECKSUMS" "${url_prefix}/v${kv}/CHECKSUMS"
+  curl -sSL -o "${TMPDIR}/CHECKSUMS.gpg" "${url_prefix}/v${kv}/CHECKSUMS.gpg"
+  gpg --verify "${TMPDIR}/CHECKSUMS.gpg" "${TMPDIR}/CHECKSUMS"
+
+  modules_path="$(
+    awk \
+      "/${re_prefix}-modules-${kv}.+generic.+_amd64\\.deb\$/ { print \$NF }" \
+      "${TMPDIR}/CHECKSUMS"
+  )"
+
+  image_path="$(
+    awk \
+      "/${re_prefix}-image-${kv}-${image_suffix}/ { print \$NF }" \
+      "${TMPDIR}/CHECKSUMS"
+  )"
+
+  if [[ ! "${image_path}" ]]; then
+    image_path="$(
+      awk \
+        "/${re_prefix}-image-unsigned-${kv}-${image_suffix}/ { print \$NF }" \
+        "${TMPDIR}/CHECKSUMS"
+    )"
+  fi
+
+  headers_path="$(
+    awk \
+      "/${re_prefix}-headers-${kv}.+_all\\.deb\$/ { print \$NF }" \
+      "${TMPDIR}/CHECKSUMS"
+  )"
+
+  generic_headers_path="$(
+    awk \
+      "/${re_prefix}-headers-${kv}.+generic.+_amd64\\.deb\$/ { print \$NF }" \
+      "${TMPDIR}/CHECKSUMS"
+  )"
+
+  [[ "${modules_path}" ]] || {
+    __error "failed to find matching modules deb for kernel ${kv}"
+    exit 1
+  }
+
+  [[ "${image_path}" ]] || {
+    __error "failed to find matching image deb for kernel ${kv}"
+    exit 1
+  }
+
+  [[ "${headers_path}" ]] || {
+    __error "failed to find matching headers deb for kernel ${kv}"
+    exit 1
+  }
+
+  [[ "${generic_headers_path}" ]] || {
+    __error "failed to find matching generic headers deb for kernel ${kv}"
+    exit 1
+  }
+
+  echo >"${TMPDIR}/CHECKSUMS.local"
+  local deb_sha256
+
+  curl -sSL -o "${TMPDIR}/linux-modules.deb" \
+    "${url_prefix}/v${kv}/${modules_path}"
+  deb_sha256="$(
+    awk "/[0-9a-f]{64}  ${modules_path}/ { print \$1 }" "${TMPDIR}/CHECKSUMS"
+  )"
+  echo "${deb_sha256}  linux-modules.deb" | tee -a "${TMPDIR}/CHECKSUMS.local"
+
+  curl -sSL -o "${TMPDIR}/linux-image.deb" \
+    "${url_prefix}/v${kv}/${image_path}"
+  deb_sha256="$(
+    awk "/[0-9a-f]{64}  ${image_path}/ { print \$1 }" "${TMPDIR}/CHECKSUMS"
+  )"
+  echo "${deb_sha256}  linux-image.deb" | tee -a "${TMPDIR}/CHECKSUMS.local"
+
+  curl -sSL -o "${TMPDIR}/linux-headers.deb" \
+    "${url_prefix}/v${kv}/${headers_path}"
+  deb_sha256="$(
+    awk "/[0-9a-f]{64}  ${headers_path}/ { print \$1 }" "${TMPDIR}/CHECKSUMS"
+  )"
+  echo "${deb_sha256}  linux-headers.deb" | tee -a "${TMPDIR}/CHECKSUMS.local"
+
+  curl -sSL -o "${TMPDIR}/linux-headers-generic.deb" \
+    "${url_prefix}/v${kv}/${generic_headers_path}"
+  deb_sha256="$(
+    awk "/[0-9a-f]{64}  ${generic_headers_path}/ { print \$1 }" \
+      "${TMPDIR}/CHECKSUMS"
+  )"
+  echo "${deb_sha256}  linux-headers-generic.deb" |
+    tee -a "${TMPDIR}/CHECKSUMS.local"
+
+  dpkg -i \
+    "${TMPDIR}/linux-modules.deb" \
+    "${TMPDIR}/linux-headers.deb" \
+    "${TMPDIR}/linux-headers-generic.deb" \
+    "${TMPDIR}/linux-image.deb" || true
+  apt-get -f install
 }
 
 main "${@}"
