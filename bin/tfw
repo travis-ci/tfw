@@ -1325,7 +1325,7 @@ __run_admin-upgrade-kernel() {
   apt-get update -yq
   apt-get install -yq curl
 
-  gpg --keyserver hkps://pgp.mit.edu --recv-key "${signing_key}"
+  gpg --keyserver hkp://ha.pool.sks-keyservers.net --recv-key "${signing_key}"
   curl -sSL -o "${TMPDIR}/CHECKSUMS" "${url_prefix}/v${kv}/CHECKSUMS"
   curl -sSL -o "${TMPDIR}/CHECKSUMS.gpg" "${url_prefix}/v${kv}/CHECKSUMS.gpg"
   gpg --verify "${TMPDIR}/CHECKSUMS.gpg" "${TMPDIR}/CHECKSUMS"
