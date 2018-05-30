@@ -1,14 +1,18 @@
 language: __stevonnie__
 dist: xenial
 group: edge
-python:
-- '3.5'
-- '3.6.5'
 services:
 - docker
 cache:
   directories:
   - "${HOME}/bin"
+addons:
+  apt:
+    packages:
+    - python3-virtualenv
+before_install:
+- python3 -m virtualenv --python=python3 .venv
+- source .venv/bin/activate
 install:
 - make deps
 script:
