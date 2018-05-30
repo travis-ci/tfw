@@ -1,12 +1,21 @@
-language: python
-python:
-- 3.5.2
-- 3.6.5
+language: __stevonnie__
+dist: xenial
+group: edge
 services:
 - docker
 cache:
   directories:
   - "${HOME}/bin"
+addons:
+  apt:
+    packages:
+    - python3-virtualenv
+env:
+  global:
+  - RUNDIR=$TRAVIS_BUILD_DIR/tmp/travis-run.d
+before_install:
+- python3 -m virtualenv --python=python3 .venv
+- source .venv/bin/activate
 install:
 - make deps
 script:
@@ -16,3 +25,5 @@ script:
 - git diff --exit-code
 - git diff --cached --exit-code
 - make test
+- make sysseed
+- make systest
