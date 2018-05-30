@@ -1387,22 +1387,31 @@ __run_admin-upgrade-kernel() {
 
   curl -sSL -o "${TMPDIR}/linux-modules.deb" \
     "${url_prefix}/v${kv}/${modules_path}"
-  deb_sha256="$(awk "/[0-9a-f]{64}  ${modules_path}/ { print \$1 }")"
+  deb_sha256="$(
+    awk "/[0-9a-f]{64}  ${modules_path}/ { print \$1 }" "${TMPDIR}/CHECKSUMS"
+  )"
   echo "${deb_sha256}  linux-modules.deb" | tee -a "${TMPDIR}/CHECKSUMS.local"
 
   curl -sSL -o "${TMPDIR}/linux-image.deb" \
     "${url_prefix}/v${kv}/${image_path}"
-  deb_sha256="$(awk "/[0-9a-f]{64}  ${image_path}/ { print \$1 }")"
+  deb_sha256="$(
+    awk "/[0-9a-f]{64}  ${image_path}/ { print \$1 }" "${TMPDIR}/CHECKSUMS"
+  )"
   echo "${deb_sha256}  linux-image.deb" | tee -a "${TMPDIR}/CHECKSUMS.local"
 
   curl -sSL -o "${TMPDIR}/linux-headers.deb" \
     "${url_prefix}/v${kv}/${headers_path}"
-  deb_sha256="$(awk "/[0-9a-f]{64}  ${headers_path}/ { print \$1 }")"
+  deb_sha256="$(
+    awk "/[0-9a-f]{64}  ${headers_path}/ { print \$1 }" "${TMPDIR}/CHECKSUMS"
+  )"
   echo "${deb_sha256}  linux-headers.deb" | tee -a "${TMPDIR}/CHECKSUMS.local"
 
   curl -sSL -o "${TMPDIR}/linux-headers-generic.deb" \
     "${url_prefix}/v${kv}/${generic_headers_path}"
-  deb_sha256="$(awk "/[0-9a-f]{64}  ${generic_headers_path}/ { print \$1 }")"
+  deb_sha256="$(
+    awk "/[0-9a-f]{64}  ${generic_headers_path}/ { print \$1 }" \
+      "${TMPDIR}/CHECKSUMS"
+  )"
   echo "${deb_sha256}  linux-headers-generic.deb" |
     tee -a "${TMPDIR}/CHECKSUMS.local"
 
