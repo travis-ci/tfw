@@ -20,8 +20,8 @@ test:
 
 .PHONY: systest
 systest: .assert-ci
-	$(TOP)/bin/tfw bootstrap
-	$(TOP)/bin/tfw admin-bootstrap
+	sudo $(TOP)/bin/tfw bootstrap
+	sudo $(TOP)/bin/tfw admin-bootstrap
 
 .PHONY: deps
 deps: ensure-checkmake ensure-shellcheck ensure-shfmt
