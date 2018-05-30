@@ -21,8 +21,8 @@ test:
 
 .PHONY: systest
 systest: .assert-ci
-	sudo -H RUNDIR=$(RUNDIR) $(TOP)/bin/tfw bootstrap
-	sudo -H RUNDIR=$(RUNDIR) $(TOP)/bin/tfw admin-bootstrap
+	sudo -H DEBUG=1 RUNDIR=$(RUNDIR) $(TOP)/bin/tfw bootstrap
+	sudo -H DEBUG=1 RUNDIR=$(RUNDIR) $(TOP)/bin/tfw admin-bootstrap
 
 .PHONY: sysseed
 sysseed: .assert-ci
