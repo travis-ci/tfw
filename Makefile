@@ -1,5 +1,6 @@
 SHELL := bash
 TMPDIR ?= /tmp
+RUNDIR ?= /tmp/travis-run.d
 PREFIX ?= /usr/local
 
 SHELLCHECK_URL := https://www.googleapis.com/download/storage/v1/b/shellcheck/o/shellcheck-v0.4.7.linux.x86_64.tar.xz?alt=media
@@ -20,8 +21,13 @@ test:
 
 .PHONY: systest
 systest: .assert-ci
-	sudo $(TOP)/bin/tfw bootstrap
-	sudo $(TOP)/bin/tfw admin-bootstrap
+	sudo RUNDIR=$(RUNDIR) $(TOP)/bin/tfw bootstrap
+	sudo RUNDIR=$(RUNDIR) $(TOP)/bin/tfw admin-bootstrap
+
+.PHONY: sysseed
+sysseed: .assert-ci
+	mkdir -p $(RUNDIR)
+	rsync -av .testdata/rundir/ $(RUNDIR)
 
 .PHONY: deps
 deps: ensure-checkmake ensure-shellcheck ensure-shfmt

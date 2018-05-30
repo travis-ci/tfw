@@ -10,6 +10,9 @@ addons:
   apt:
     packages:
     - python3-virtualenv
+env:
+  global:
+  - RUNDIR=$TRAVIS_BUILD_DIR/tmp/travis-run.d
 before_install:
 - python3 -m virtualenv --python=python3 .venv
 - source .venv/bin/activate
@@ -22,4 +25,5 @@ script:
 - git diff --exit-code
 - git diff --cached --exit-code
 - make test
+- make sysseed
 - make systest
