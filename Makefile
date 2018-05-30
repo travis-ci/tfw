@@ -21,13 +21,13 @@ test:
 
 .PHONY: systest
 systest: .assert-ci
-	sudo RUNDIR=$(RUNDIR) $(TOP)/bin/tfw bootstrap
-	sudo RUNDIR=$(RUNDIR) $(TOP)/bin/tfw admin-bootstrap
+	sudo -H RUNDIR=$(RUNDIR) $(TOP)/bin/tfw bootstrap
+	sudo -H RUNDIR=$(RUNDIR) $(TOP)/bin/tfw admin-bootstrap
 
 .PHONY: sysseed
 sysseed: .assert-ci
 	mkdir -p $(RUNDIR)
-	rsync -av .testdata/rundir/ $(RUNDIR)
+	rsync -av $(TOP)/.testdata/rundir/ $(RUNDIR)
 
 .PHONY: deps
 deps: ensure-checkmake ensure-shellcheck ensure-shfmt
