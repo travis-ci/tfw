@@ -1419,7 +1419,8 @@ __run_admin-upgrade-kernel() {
     "${TMPDIR}/linux-modules.deb" \
     "${TMPDIR}/linux-headers.deb" \
     "${TMPDIR}/linux-headers-generic.deb" \
-    "${TMPDIR}/linux-image.deb"
+    "${TMPDIR}/linux-image.deb" || true
+  apt-get -f install
 }
 
 main "${@}"
