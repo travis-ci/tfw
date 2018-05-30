@@ -1329,6 +1329,10 @@ __run_admin-upgrade-kernel() {
     "http://mirrors.kernel.org/ubuntu/pool/main/o/openssl/libssl1.1_1.1.0g-2ubuntu4_amd64.deb"
   dpkg -i "${TMPDIR}/libssl1.1.deb"
 
+  curl -sSL -o "${TMPDIR}/linux-base.deb" \
+    "http://mirrors.kernel.org/ubuntu/pool/main/l/linux-base/linux-base_4.5ubuntu1_all.deb"
+  dpkg -i "${TMPDIR}/linux-base.deb"
+
   gpg --keyserver hkp://ha.pool.sks-keyservers.net --recv-key "${signing_key}"
   curl -sSL -o "${TMPDIR}/CHECKSUMS" "${url_prefix}/v${kv}/CHECKSUMS"
   curl -sSL -o "${TMPDIR}/CHECKSUMS.gpg" "${url_prefix}/v${kv}/CHECKSUMS.gpg"
