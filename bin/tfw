@@ -300,6 +300,7 @@ EOCONF
     curl \
     debian-archive-keyring \
     fail2ban \
+    gawk \
     lvm2 \
     openssh-client \
     openssh-server \
