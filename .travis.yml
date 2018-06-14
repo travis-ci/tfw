@@ -14,8 +14,10 @@ env:
   global:
   - RUNDIR=$TRAVIS_BUILD_DIR/tmp/travis-run.d
 before_install:
+- python3 --version
 - travis_retry python3 -m virtualenv --python=python3 .venv
 - source .venv/bin/activate
+- python --version
 install:
 - make deps
 script:
