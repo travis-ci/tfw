@@ -11,8 +11,6 @@ import time
 import arrow
 import psutil
 
-_IS_PY36 = sys.version_info >= (3, 6)
-
 
 def main(argv=sys.argv[:], env=os.environ):
     parser = _build_argument_parser(env)
@@ -325,12 +323,10 @@ class DockerContainerCleaner:
         popen_args.setdefault('stdout', subprocess.PIPE)
         popen_args.setdefault('stderr', subprocess.PIPE)
         popen_args.setdefault('check', True)
-        if _IS_PY36:
-            popen_args.setdefault('encoding', 'utf-8')
 
         self._logger.debug('running', dict(command=' '.join(command)))
 
-        return subprocess.run(command, **popen_args).stdout
+        return subprocess.run(command, **popen_args).stdout.decode('utf-8')
 
 
 class DockerContainer:
