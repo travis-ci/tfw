@@ -751,10 +751,6 @@ __run_admin-bootstrap() {
   __run_admin-rsyslog "${TFW_SYSLOG_ADDRESS}"
   __run_admin-duo "${TFW_DUO_CONF}"
   __run_admin-librato
-
-  if [[ "${DIST}" == xenial ]]; then
-    __run_admin-upgrade-kernel "${TFW_KERNEL_VERSION}"
-  fi
 }
 
 def admin-users "<username:github-login> [username:github-login, ]
