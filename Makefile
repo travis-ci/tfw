@@ -6,7 +6,7 @@ PREFIX ?= /usr/local
 SHELLCHECK_URL := https://www.googleapis.com/download/storage/v1/b/shellcheck/o/shellcheck-v0.4.7.linux.x86_64.tar.xz?alt=media
 SHFMT_URL := https://github.com/mvdan/sh/releases/download/v2.2.0/shfmt_v2.2.0_linux_amd64
 
-TOP := $(shell git rev-parse --show-toplevel)
+TOP = $(shell git rev-parse --show-toplevel)
 
 .PHONY: all
 all: test
