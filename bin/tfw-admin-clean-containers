@@ -176,8 +176,8 @@ class DockerContainerCleaner:
 
         self._logger.debug('fetching travis job containers')
         containers = self._fetch_travis_job_containers()
-        self._logger.debug(
-            'fetched travis job containers', dict(length=len(containers)))
+        self._logger.debug('fetched travis job containers',
+                           dict(length=len(containers)))
 
         if len(containers) == 0:
             self._logger.warning('no travis job containers running, aborting')
@@ -280,8 +280,8 @@ class DockerContainerCleaner:
             return True
 
         if not self._container_has_active_exec(container):
-            self._logger.debug(
-                'no active exec for container', dict(name=container.name))
+            self._logger.debug('no active exec for container',
+                               dict(name=container.name))
             return True
 
         if not self._container_is_newer_than(container.started_at, max_age):
@@ -302,12 +302,12 @@ class DockerContainerCleaner:
         if container_shim is None:
             return
         try:
-            self._logger.debug(
-                'trying to kill container shim', dict(pid=container_shim.pid))
+            self._logger.debug('trying to kill container shim',
+                               dict(pid=container_shim.pid))
             container_shim.kill()
         except psutil.Error as exc:
-            self._logger.warning(
-                'failed to kill container shim', dict(err=exc))
+            self._logger.warning('failed to kill container shim',
+                                 dict(err=exc))
 
     def _docker_try_for_container(self, op, desc, container):
         try:
