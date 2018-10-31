@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+import argparse
+import base64
+import os
+import random
+import socket
+import sys
+import time
+import warnings
+
+warnings.filterwarnings('ignore')
+
+
+def main(argv=sys.argv[:], env=os.environ):
+    parser = _build_argument_parser(env)
+    args = parser.parse_args(argv[1:])
+    prog = os.path.basename(__file__)
+
+    random.seed(args.seed)
+
+    loaded = args.input_file.readlines(False)
+
+    if args.base64_decode:
+        loaded = [
+            base64.decodestring(s.encode("utf-8")).decode('utf-8')
+            for s in loaded
+        ]
+
+    idx = random.randint(0, len(loaded) - 1)
+    selected = loaded[idx]
+
+    print(
+        "{prog} selected idx={idx} len={len} seed={seed}".format(
+            prog=prog, idx=idx, len=len(loaded), seed=args.seed),
+        file=sys.stderr)
+
+    args.output_file.write(selected)
+
+    return 0
+
+
+def _build_argument_parser(env):
+    parser = argparse.ArgumentParser(
+        prog='tfw randline',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument(
+        '-i',
+        '--input-file',
+        type=argparse.FileType('r', encoding='utf-8'),
+        help='input file from which lines will be read',
+        default=env.get('TFW_RANDLINE_KEY_INPUT_FILE',
+                        env.get('INPUT_FILE', '-')))
+    parser.add_argument(
+        '-o',
+        '--output-file',
+        type=argparse.FileType('w', encoding='utf-8'),
+        help='output file to which selected line will be written',
+        default=env.get('TFW_RANDLINE_KEY_OUTPUT_FILE',
+                        env.get('OUTPUT_FILE', '-')))
+    parser.add_argument(
+        '-d',
+        '--base64-decode',
+        action='store_true',
+        help='base64-decode the selected line before writing',
+        default=_asbool(
+            env.get('TFW_RANDLINE_BASE64_DECODE', env.get(
+                'BASE64_DECODE', 'no'))))
+    parser.add_argument(
+        '-s',
+        '--seed',
+        type=float,
+        help='numeric seed to use for seeding rng',
+        default=env.get('TFW_RANDLINE_KEY_SEED',
+                        env.get('SEED', _hostname_seed(env))))
+    return parser
+
+
+def _asbool(string):
+    return string.lower() in ('yes', 'on', '1', 'true')
+
+
+def _hostname_seed(env):
+    try:
+        hostname = env.get('HOSTNAME', '')
+        if hostname == '':
+            hostname = socket.gethostname()
+        return sum([ord(c) for c in list(hostname)])
+    except socket.error as exc:
+        print(
+            '{prog} err={exc}'.format(
+                prog=os.path.basename(__file__), exc=exc),
+            file=sys.stderr)
+        return time.time()
+
+
+if __name__ == '__main__':
+    sys.exit(main())
