@@ -273,6 +273,8 @@ __bootstrap_apt() {
     return
   fi
 
+  export DEBIAN_FRONTEND=noninteractive
+
   systemctl disable apt-daily || true
   systemctl stop apt-daily || true
   systemctl disable apt-daily-upgrade || true
