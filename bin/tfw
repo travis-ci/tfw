@@ -954,6 +954,11 @@ __run_admin-hostname() {
   local hostname_template="${1:-${RUNDIR}/instance-hostname.tmpl}"
   local hosts_line local_hosts_line
   local instance_hostname
+
+  if [[ ! -f "${hostname_template}" ]]; then
+    printf '___INSTANCE_NAME___\n' >"${hostname_template}"
+  fi
+
   instance_hostname="$(__run_gsub 'instance-hostname' "${hostname_template}")"
 
   if [[ ! "${instance_hostname}" ]]; then
