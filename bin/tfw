@@ -1225,7 +1225,7 @@ Pin-Priority: 1001
 EOF
 
   apt-get update -yqq
-  apt-get install -yqq collectd
+  apt-get install -yqq collectd libyajl2
 
   local conf_dest="${OPTDIR}/collectd/etc/collectd.conf.d/librato.conf"
   if [[ ! -d "$(dirname "${conf_dest}")" ]]; then
