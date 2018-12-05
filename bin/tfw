@@ -1225,9 +1225,15 @@ Pin-Priority: 1001
 EOF
 
   apt-get update -yqq
-  apt-get install -yqq collectd
+  apt-get install -yqq collectd libyajl2
 
-  cat >"${OPTDIR}/collectd/etc/collectd.conf.d/librato.conf" <<EOF
+  local conf_dest="${OPTDIR}/collectd/etc/collectd.conf.d/librato.conf"
+  if [[ ! -d "$(dirname "${conf_dest}")" ]]; then
+    conf_dest="${ETCDIR}/collectd/collectd.conf.d/librato.conf"
+  fi
+
+  if [[ -d "$(dirname "${conf_dest}")" ]]; then
+    cat >"${conf_dest}" <<EOF
 LoadPlugin write_http
 Hostname "${HOSTNAME}"
 <Plugin write_http>
@@ -1240,6 +1246,9 @@ Hostname "${HOSTNAME}"
   </Node>
 </Plugin>
 EOF
+  else
+    __warn 'no collectd conf directory found'
+  fi
 
   systemctl restart collectd || true
 }
