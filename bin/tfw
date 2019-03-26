@@ -1283,16 +1283,7 @@ __run_admin-docker-volume-setup() {
     "dm.metadatadev=/dev/direct-lvm/metadata",
     "dm.fs=xfs"
   ],
-  "userns-remap": "default",
-  "registry-mirrors": ["staging-1-docker-registry.gce-us-central1.travisci.net"]
-}
-EOJSON
-
-  cat >"${ETCDIR}/docker/registry-daemon.json" <<EOJSON
-{
-  $(if [[ "${debug}" ]]; then echo '"debug": true, '; fi)
-  "data-root": "/mnt/docker",
-  "storage-driver": "filesystem"
+  "userns-remap": "default"
 }
 EOJSON
 }
